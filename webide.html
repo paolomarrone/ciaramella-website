@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ciaramella webIDE</title>
+<link rel="stylesheet" href="bulma.min.css">
+
+<script type="text/javascript" src="../zampogna-web.js"></script>
+<style type="text/css">
+	.codeEditor, .lineCounter {
+	    font-family: lucida console, courier new, courier, monospace;
+	    margin: 0;
+	    padding: 10px 0;
+	    height: 45vh;
+	    border-radius: 0;
+	    resize: none;
+	    font-size: 16px;
+	    line-height: 1.2;
+	    outline: none;
+	    box-sizing: border-box;
+	}
+	.lineCounter:focus-visible,
+	.codeEditor:focus-visible {
+    	outline:none;
+	}
+	.lineCounter {
+		display: flex;
+		border-color: transparent;
+		overflow-y: hidden;
+		text-align: right;
+		box-shadow: none;
+		color: #707070;
+		background-color: #d8d8d8;
+		position: absolute;
+		width: 2.7rem;
+		/* Determine appearance of line counter */
+		background-color:#3E3D32;
+		border-color:#3E3D32;
+		color:#928869;
+	}
+	.codeEditor {
+		padding-left: calc(3.5rem + 5px);
+		width:100%;
+		/* Determine appearance of code editor */
+		background-color:#272822;
+		border-color:#272822;
+		color:#ffffff;
+	}
+	.console {
+		background-color:#111111;
+		color:#ffffff;
+	}
+	.codeView {
+		background-color: #333333;
+		color:#dddddd;
+	}
+</style>
+
+<script type="text/javascript">
+
+	var node;
+	var ctx;
+	var inputNode;
+	var streamMic;
+
+	function newTextEditor () {
+		let codeEditor = document.createElement("textarea");
+		let lineCounter = document.createElement("textarea");
+
+		lineCounter.readOnly = true
+		lineCounter.classList.add("lineCounter")
+		codeEditor.placeholder = "Code here..."
+		codeEditor.spellcheck = false
+		codeEditor.classList.add("codeEditor")
+
+		codeEditor.addEventListener('scroll', () => {
+			lineCounter.scrollTop = codeEditor.scrollTop;
+			lineCounter.scrollLeft = codeEditor.scrollLeft;
+		});
+
+		codeEditor.addEventListener('keydown', (e) => {
+			let { keyCode } = e;
+			let { value, selectionStart, selectionEnd } = codeEditor;
+			if (keyCode === 9) {  // TAB = 9
+				e.preventDefault();
+				codeEditor.value = value.slice(0, selectionStart) + '\t' + value.slice(selectionEnd);
+				codeEditor.setSelectionRange(selectionStart+2, selectionStart+2)
+			}
+		});
+
+		let lineCountCache = 0;
+		function line_counter() {
+			let lineCount = codeEditor.value.split('\n').length;
+			let outarr = new Array();
+			if (lineCountCache != lineCount) {
+				for (let x = 0; x < lineCount; x++) {
+					outarr[x] = (x + 1) + ' ';
+				}
+				lineCounter.value = outarr.join('\n');
+			}
+			lineCountCache = lineCount;
+		}
+		codeEditor.addEventListener('input', () => {
+			line_counter();
+		});
+
+		let textEditorDiv = document.createElement("div")
+		textEditorDiv.appendChild(lineCounter)
+		textEditorDiv.appendChild(codeEditor)
+		
+		let compileInputDiv = document.createElement("div")
+		compileInputDiv.classList.add("container")
+		compileInputDiv.innerHTML = (
+			'<input class="input is-danger" type="text" placeholder="Initial Block. E.g.: lowpass_filter">\
+			<input class="input is-warning" type="text" placeholder="Control input. E.g.: volume, cutoff, resonance">\
+			<input class="input is-warning is-small" type="text" placeholder="Input initial values. E.g.: x = 0.5, volume = 1">'
+		)
+
+		let div = document.createElement("div")
+		div.appendChild(textEditorDiv)
+		div.appendChild(compileInputDiv)
+
+		let textEditorsDiv = document.getElementById("textEditorsDiv")
+		textEditorsDiv.appendChild(div)
+
+		return div
+	}
+
+	function closeTab (tab) {
+		let ul = tab.parentNode.parentNode.parentNode
+		let wasactive = tab.parentNode.parentNode.classList.contains("is-active")
+		tab.parentNode.parentNode.ted.parentNode.removeChild(tab.parentNode.parentNode.ted)
+		ul.removeChild(tab.parentNode.parentNode)
+		if (ul.getElementsByTagName("li").length <= 1)
+			newTab(document.getElementById("newTabB"))
+		else if (wasactive) {
+			selectTab(ul.children[ul.children.length - 2])
+		}
+	}
+
+	function newTab (e) {
+		let li = document.createElement("li")
+		li.onclick = () => selectTab(li)
+		li.innerHTML = "<a><span>Untitled.crm</span>&nbsp; <span class='has-text-danger' onclick='closeTab(this)'>✖</span></a>"
+		e.parentNode.insertBefore(li, e)
+		let ted = newTextEditor()
+		li.ted = ted
+		selectTab(li)
+	}
+
+	function selectTab (e) {
+		if (!e || !e.parentNode || e.classList.contains("is-active"))
+			return
+		for (let i = 0; i < e.parentNode.children.length - 1; i++) {
+			e.parentNode.children[i].classList.remove("is-active")
+			e.parentNode.children[i].ted.hidden = true
+		}
+		e.classList.add("is-active")
+		e.ted.hidden = false
+	}
+
+	window.onload = function () {
+		let tab = newTab(document.getElementById("newTabB"))
+	}
+
+	function getActiveTED () {
+		let activeTed = null;
+		let tabs = document.getElementById("tabs")
+		let div;
+		for (let i = 0; i < tabs.children[0].children.length; i++) {
+			let li = tabs.children[0].children[i];
+			if (li.classList.contains("is-active")) {
+				return li.ted
+			}
+		}
+	}
+
+	function compile (activeTed, target_lang) {
+		let code = activeTed.children[0].children[1].value
+		if (!code || code == "")
+			throw new Error("Empty Code")
+
+		let initial_block = activeTed.children[1].children[0].value
+		if (!initial_block || initial_block == "")
+			throw new Error("No initial block declared")
+
+		let control_inputsS = activeTed.children[1].children[1].value
+		let control_inputs = control_inputsS.split(",").map(x => x.trim())
+
+		let inputInitialValuesS = activeTed.children[1].children[2].value
+		let inputInitialValues = {}
+		inputInitialValuesS.split(',').map(o => o.trim()).map(o => o.split('=')).forEach(e => inputInitialValues[e[0]] = e[1])
+
+		let debug = false
+
+		let output = zampogna.compile(null, debug, code, initial_block, control_inputs, inputInitialValues, target_lang)
+
+		return output
+	}
+
+	function handleInput(e) {
+		node.port.postMessage({type: "paramChange", id: e.id, value: e.value})
+	};
+	async function play (activeTed, processorStr) {
+
+		let pluginDiv = document.getElementById("pluginDiv");
+		pluginDiv.innerHTML = ""
+
+		let control_inputsS = activeTed.children[1].children[1].value
+		let control_inputs = control_inputsS.split(",").map(x => x.trim())
+		for (let c = 0; c < control_inputs.length; c++) {
+			if (!control_inputs[c] || control_inputs[c] == "")
+				continue
+			pluginDiv.innerHTML += '\
+				<div class="field is-horizontal">\
+					<div class="field-label is-normal">\
+						<label class="label">' + control_inputs[c] + '</label>\
+					</div>\
+					<div class="field-body">\
+						<div class="field">\
+							<p class="control">\
+								<input class="input is-primary" type="range" \
+								id=' + control_inputs[c] + ' name=' + control_inputs[c] + 
+								' min=0 max=1 value=0.5 step="any" oninput="handleInput(this)">\
+							</p>\
+						</div>\
+					</div>\
+				</div>\
+			'
+ 		}
+
+		let scriptUrl = URL.createObjectURL(new Blob([processorStr], {type: "text/javascript"}));
+		if (ctx)
+			await ctx.close()
+		ctx = new (window.AudioContext || window.webkitAudioContext)();
+		await ctx.audioWorklet.addModule(scriptUrl);
+
+		node = new AudioWorkletNode(ctx, "PluginProcessor", { outputChannelCount: [1] });
+		node.connect(ctx.destination);
+		if (!streamMic)
+			streamMic = await navigator.mediaDevices.getUserMedia({ audio: { autoGainControl: false, echoCancellation: false, noiseSuppression: false, latency: 0.005 } });
+		inputNode = ctx.createMediaStreamSource(streamMic);
+		inputNode.connect(node);
+	}
+
+	function compileAndPlay () {
+		let activeTed = getActiveTED()
+		try {
+			var processorStr = compile(activeTed, "js")[1].str
+			document.getElementById("consoleTA").innerHTML = "Compiled successfully"
+		}
+		catch (e) {
+			document.getElementById("consoleTA").innerHTML = e
+			return
+		}
+
+		try {
+			play(activeTed, processorStr)
+		}
+		catch (e) {
+			throw e
+		}
+	}
+
+	function compileAndView () {
+
+		let exportConsoleDiv = document.getElementById("exportConsoleDiv")
+		exportConsoleDiv.innerHTML = ""
+		let exportViewDiv = document.getElementById("exportViewDiv")
+		exportViewDiv.innerHTML = ""
+		let exportSaveDiv = document.getElementById("exportSaveDiv")
+		exportSaveDiv.innerHTML = ""
+
+		try {
+			let activeTed = getActiveTED()
+			var output = compile(activeTed, document.getElementById("target_lang").value)
+			for (let o = 0; o < output.length; o++) {
+				console.log(output[o])
+				exportViewDiv.innerHTML += '\
+					<div>\
+						<label class="label">' + output[o].name + '</label>\
+						<textarea class="textarea codeView" readonly rows=19>'+
+							output[o].str +
+						'</textarea>\
+					</div><br>\
+				'
+			}
+		}
+		catch (e) {
+			exportConsoleDiv.innerHTML = e
+			return
+		}
+
+		let saveButton = document.createElement("button")
+		saveButton.classList.add("button")
+		saveButton.classList.add("is-primary")
+		saveButton.classList.add("is-large")
+		saveButton.innerHTML = "Download Files!"
+		saveButton.onclick = function () {
+			for (let f in output)
+				downloadtext(output[f].name, output[f].str)
+		}
+		exportSaveDiv.appendChild(saveButton)
+	}
+
+	function downloadtext(filename, text) {
+	    var element = document.createElement('a');
+	    element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
+	    element.setAttribute('download', filename);
+	    element.style.display = 'none';
+	    document.body.appendChild(element);
+	    element.click();
+	    document.body.removeChild(element);
+	}
+
+</script>
+</head>
+
+<body>
+<nav class="navbar is-dark" role="navigation" aria-label="main navigation">
+  <div class="navbar-brand">
+    <a class="navbar-item" href="index.html">
+      <img src="logo.svg" width="80" height="28">
+      <h3 class="title is-3 has-text-light">Ciaramella</h3>
+    </a>
+
+    <a role="button" class="navbar-burger" aria-label="menu" aria-expanded="false" data-target="navbarBasicExample">
+      <span aria-hidden="true"></span>
+      <span aria-hidden="true"></span>
+      <span aria-hidden="true"></span>
+    </a>
+  </div>
+
+  <div id="navbarBasicExample" class="navbar-menu">
+    <div class="navbar-start">
+      
+    </div>
+
+    <div class="navbar-end">
+    	<a class="navbar-item" href="index.html">
+        Home
+      </a>
+
+      <a class="navbar-item" href="papers.html">
+        Papers
+      </a>
+
+      <a class="navbar-item" href="https://github.com/paolomarrone/Zampogna" target="_blank">
+        Source
+      </a>
+
+      <a class="navbar-item" href="webide.html">
+        Web Playground
+      </a>
+  </div>
+
+</nav>
+
+
+<div class="container">
+
+	<div class="notification is-warning">
+		<p>This webIDE is a work in progress, certain functions are known to not work properly or at all.</p>
+		<p><strong>Use at your own risk!</strong></p>
+	</div>
+
+	<div id="tabs" class="tabs is-boxed is-centered is-normal">
+		<ul>	
+			<li onclick="newTab(this)" id="newTabB"><a><span>✚</span></a></li>
+		</ul>
+	</div>
+
+	<div id="textEditorsDiv" class="container">
+	
+	</div>
+
+	<br>
+	<div class="container">
+		<button class="button is-primary is-medium is-fullwidth" onclick="compileAndPlay()">Compile & Play</button>
+	</div>
+	<br>
+	
+	<div class="container">
+		<textarea id="consoleTA" class="textarea is-warning console" placeholder="Console messages" readonly>Console messages...</textarea>
+	</div>
+
+	<br>
+
+	<div class="box has-background-light">	
+		<div class="columns is-vcentered">
+			
+			<div class="column is-2 buttons is-bordered">
+				<div class="box">
+					<h5 class="title is-5">IN</h5>
+					<button class="button is-normal is-success is-light is-fullwidth">🎙</button>
+					<button class="button is-normal is-outlined is-fullwidth">File</button>
+					<button class="button is-normal is-outlined is-fullwidth">File</button>
+				</div>
+			</div>
+			<div class="column is-8">
+				<div class="box">
+					<h5 class="title is-5">Plugin</h5>
+
+					<div id="pluginDiv">
+						<div class="field is-horizontal">
+							<label class="label">The plugin will be shown here when compiled</label>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<div class="column is-2 buttons is-bordered">
+				<div class="box">
+					<h5 class="title is-5 is-centered">OUT</h5>
+					<button class="button is-success is-light is-normal is-fullwidth">🔊</button>
+				</div>
+			</div>
+		</div>
+	</div>
+
+
+	<div class="container">
+		<div class="box">
+			<h4 class="title is-4">Plugin Exportation</h4>
+			<label class="label">Choose a target language and press "Compile & Export</label>
+
+			<div class="container">
+			<div class="select is-medium">
+				<select id="target_lang">
+					<option value="js">Javascript + webaudio</option>
+					<option value="cpp">C++ + vst2 wrapper</option>
+					<option value="MATLAB">MATLAB</option>
+				</select>
+			</div>
+			<button class="button is-primary is-medium" onclick="compileAndView()">Compile & View</button>
+			</div>
+			<br>
+
+			<div id="exportConsoleDiv" class="container has-background-danger">
+			
+			</div>
+			<br>
+			<div class="container" id="exportViewDiv">
+
+			</div>
+
+			<div class="container" id="exportSaveDiv">
+				
+			</div>
+		</div>
+	</div>
+
+	<hr>
+	
+</div>
+
+
+<footer class="footer">
+	<div class="content has-text-centered">
+		<p>
+			<strong>Ciaramella</strong> by <a href="https://orastron.com/">Orastron</a>. The source code is licensed
+			<a href="https://www.isc.org/licenses/">ISC</a>. The website content
+			is licensed <a href="https://www.isc.org/licenses/">ISC</a>.
+		</p>
+	</div>
+</footer>
+
+
+</body>
+</html>
