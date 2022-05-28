@@ -5,6 +5,42 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ciaramella Scientific Publications</title>
 <link rel="stylesheet" href="bulma.min.css">
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+
+  // Get all "navbar-burger" elements
+  const $navbarBurgers = Array.prototype.slice.call(document.querySelectorAll('.navbar-burger'), 0);
+
+  // Check if there are any navbar burgers
+  if ($navbarBurgers.length > 0) {
+
+    // Add a click event on each of them
+    $navbarBurgers.forEach( el => {
+      let target = el.dataset.target;
+      let $target = document.getElementById(target);
+        
+      el.addEventListener('click', () => {
+        // Toggle the "is-active" class on both the "navbar-burger" and the "navbar-menu"
+        el.classList.toggle('is-active');
+        $target.classList.toggle('is-active');
+
+      });
+      
+      const $navbarItems = Array.prototype.slice.call($target.querySelectorAll('.navbar-item'), 0);
+        if ($navbarItems.length > 0) {
+			$navbarItems.forEach( it => {
+				it.addEventListener('click', () => {
+					el.classList.remove('is-active');
+					$target.classList.remove('is-active');
+					
+				});
+			});
+		}
+    });
+  }
+  
+});
+</script>
 
 </head>
 
