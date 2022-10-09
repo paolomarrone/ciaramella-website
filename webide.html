@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ciaramella webIDE</title>
 <link rel="stylesheet" href="bulma.min.css">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+
 <script>
 document.addEventListener('DOMContentLoaded', () => {
 
@@ -103,6 +103,18 @@ document.addEventListener('DOMContentLoaded', () => {
 	var ctx;
 	var inputNode;
 	var streamMic;
+	const serverFileUrls = [
+		"audiofiles/wa1.wav",
+		"audiofiles/aw2.wav",
+		"audiofiles/sample.mp3"
+	]
+	const serverFileBufferCache = [];
+	let serverFileSelected = 0;
+	let userFileBufferCache = null;
+	let userFileName = "";
+	let sourceSelected = null;
+
+	inputInitialValues = {};
 
 	function newTextEditor () {
 		let codeEditor = document.createElement("textarea");
@@ -131,7 +143,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
 		let lineCountCache = 0;
 		function line_counter() {
-			codeEditor.cols = 40
 			let lineCount = codeEditor.value.split('\n').length;
 			let outarr = new Array();
 			if (lineCountCache != lineCount) {
@@ -153,9 +164,9 @@ document.addEventListener('DOMContentLoaded', () => {
 		let compileInputDiv = document.createElement("div")
 		compileInputDiv.classList.add("container")
 		compileInputDiv.innerHTML = (
-			'<input class="input is-danger" type="text" placeholder="Initial Block. E.g.: lowpass_filter">\
-			<input class="input is-warning" type="text" placeholder="Control input. E.g.: volume, cutoff, resonance">\
-			<input class="input is-warning is-small" type="text" placeholder="Input initial values. E.g.: x = 0.5, volume = 1">'
+			'<input class="input is-danger" type="text" title="Initial block" placeholder="Initial Block. E.g.: lowpass_filter">\
+			<input class="input is-warning" type="text" title="Control inputs" placeholder="Control input. E.g.: volume, cutoff, resonance">\
+			<input class="input is-warning is-small" type="text" title="Initial input values" placeholder="Initial input values. E.g.: x = 0.5, volume = 1">'
 		)
 
 		let div = document.createElement("div")
@@ -258,9 +269,8 @@ document.addEventListener('DOMContentLoaded', () => {
 		let control_inputs = control_inputsS.split(",").map(x => x.trim())
 
 		let inputInitialValuesS = activeTed.children[1].children[2].value
-		let inputInitialValues = {}
+		inputInitialValues = {}
 		inputInitialValuesS.split(',').map(o => o.trim()).map(o => o.split('=')).forEach(e => inputInitialValues[e[0]] = e[1])
-
 		let debug = false
 
 		let output = zampogna.compile(null, debug, code, initial_block, control_inputs, inputInitialValues, target_lang)
@@ -281,6 +291,8 @@ document.addEventListener('DOMContentLoaded', () => {
 		for (let c = 0; c < control_inputs.length; c++) {
 			if (!control_inputs[c] || control_inputs[c] == "")
 				continue
+			let il = inputInitialValues[control_inputs[c]];
+			if (il == undefined) il = 0;
 			pluginDiv.innerHTML += '\
 				<div class="field is-horizontal">\
 					<div class="field-label is-normal">\
@@ -291,7 +303,7 @@ document.addEventListener('DOMContentLoaded', () => {
 							<p class="control">\
 								<input class="input is-primary" type="range" \
 								id=' + control_inputs[c] + ' name=' + control_inputs[c] + 
-								' min=0 max=1 value=0.5 step="any" oninput="handleInput(this)">\
+								' min=0 max=1 value="' + il + '"" step="any" oninput="handleInput(this)">\
 							</p>\
 						</div>\
 					</div>\
@@ -309,8 +321,16 @@ document.addEventListener('DOMContentLoaded', () => {
 		node.connect(ctx.destination);
 		
 		if (!inputNode) {
-			await buttonMicF();
+			await buttonServerFileF();
 			return;
+		}
+		else {
+			if (sourceSelected == 'MIC')
+				buttonMicF();
+			else if (sourceSelected == 'SFI')
+				buttonServerFileF(1);
+			else if (sourceSelected == 'UFI')
+				buttonUserFileF([], 1);
 		}
 
 		inputNode.connect(node);
@@ -386,6 +406,8 @@ document.addEventListener('DOMContentLoaded', () => {
 	}
 
 	async function buttonMicF () {
+		if (!ctx)
+			return
 		if (!streamMic)
 			streamMic = await navigator.mediaDevices.getUserMedia({ audio: { autoGainControl: false, echoCancellation: false, noiseSuppression: false, latency: 0.005 } });
 		if (inputNode)
@@ -398,22 +420,125 @@ document.addEventListener('DOMContentLoaded', () => {
 		document.getElementById("bSFi").classList.remove("is-success");
 		document.getElementById("bUFi").classList.remove("is-success");
 		document.getElementById("playinglabel").innerHTML = "Playing: Microphone";
+		sourceSelected = 'MIC';
 	}
 
-	function buttonServerFileF () {
-
-	}
-
-
-	function buttonUserFileF (files) {
-		if (files.length == 0)
-			return
+	function buttonServerFileF (again) {
 		if (!ctx)
 			return
+		changeSong(again ? 0 : 1)
 
-		uploadFile(files[0])
+		function changeSong (direction) {
+			serverFileSelected = (serverFileSelected + direction + serverFileUrls.length) % serverFileUrls.length;
 
-		function uploadFile(file) {
+			downloadSong(serverFileSelected, function () {
+				startSong(serverFileSelected);
+				playPause(true);
+				document.getElementById("bMic").classList.remove("is-success");
+				document.getElementById("bSFi").classList.add("is-success");
+				document.getElementById("bUFi").classList.remove("is-success");
+				document.getElementById("playinglabel").innerHTML = "Playing: " + serverFileUrls[serverFileSelected].split('/')[1];
+				sourceSelected = 'SFI';
+			});
+		}
+
+		function downloadSong (id, cb) {
+			if (serverFileBufferCache[id]) {
+				cb();
+				return;
+			}
+
+			GetFileObjectFromURL(serverFileUrls[id], function (fileObject) {
+			    uploadFile(fileObject, id)
+			}, id);
+
+
+			function GetFileObjectFromURL (filePathOrUrl, convertBlob, id) {
+				GetFileBlobUsingURL(filePathOrUrl, function (blob) {
+					blob.name = serverFileUrls[id];
+					convertBlob(blob);
+				});
+			};
+
+			function GetFileBlobUsingURL (url, convertBlob) {
+				var xhr = new XMLHttpRequest();
+				xhr.open("GET", url);
+				xhr.responseType = "blob";
+				xhr.addEventListener('load', function() {
+					convertBlob(xhr.response);
+				});
+				xhr.send();
+			};
+
+			function uploadFile(file, id) {
+				if (!file)
+					return;
+
+				var fileReader = new FileReader();
+				fileReader.readAsArrayBuffer(file);
+				fileReader.onload = function(e) {
+					var audioFile = e.target.result;
+					console.log(("Loaded. Filename: '" + file.name + "'"), ( "(" + ((Math.floor(file.size/1024/1024*100))/100) + " MB)" ));
+					
+					ctx.decodeAudioData(audioFile, 
+						function(buffer) {
+							console.log("sampleRate = " + buffer.sampleRate + "; numberOfChannels = " + buffer.numberOfChannels)
+						 	serverFileBufferCache[id] = buffer;
+							cb();
+						}, 
+						function() {
+							console.log("Error decoding the input file");
+						}
+					);
+				}
+			};
+		}
+
+		function startSong(id) {
+			if (inputNode)
+				inputNode.disconnect();
+
+			inputNode = ctx.createBufferSource();
+			inputNode.connect(node);
+			
+			inputNode.buffer = serverFileBufferCache[id];
+			inputNode.loop = true;
+			inputNode.start();
+		}
+
+	}
+
+
+	function buttonUserFileF (files, again) {
+		if (!ctx)
+			return;
+		if (again) {
+			cb();
+			return;
+		}
+
+		if (files.length == 0)
+			return;
+
+		function cb () {
+			if (inputNode)
+				inputNode.disconnect();
+			inputNode = ctx.createBufferSource();
+			inputNode.buffer = userFileBufferCache;
+			inputNode.loop = true;
+			inputNode.connect(node);
+			inputNode.start(0);
+
+			document.getElementById("bMic").classList.remove("is-success");
+			document.getElementById("bSFi").classList.remove("is-success");
+			document.getElementById("bUFi").classList.add("is-success");
+			document.getElementById("playinglabel").innerHTML = "Playing: " + userFileName;
+			sourceSelected = 'UFI';
+		}
+
+		uploadFile(files[0], cb);
+
+		function uploadFile(file, cb) {
 			var fileReader = new FileReader();
 			fileReader.readAsArrayBuffer(file);
 			fileReader.onload = function(e) {
@@ -421,18 +546,9 @@ document.addEventListener('DOMContentLoaded', () => {
 				ctx.decodeAudioData(e.target.result, 
 					function(buffer) {
 						console.log("sampleRate = " + buffer.sampleRate + "; numberOfChannels = " + buffer.numberOfChannels)
-						if (inputNode)
-							inputNode.disconnect();
-						inputNode = ctx.createBufferSource();
-						inputNode.connect(node);
-						inputNode.buffer = buffer;
-						inputNode.loop = true;
-						inputNode.start(0);
-
-						document.getElementById("bMic").classList.remove("is-success");
-						document.getElementById("bSFi").classList.remove("is-success");
-						document.getElementById("bUFi").classList.add("is-success");
-						document.getElementById("playinglabel").innerHTML = "Playing: " + file.name;
+						userFileBufferCache = buffer;
+						userFileName = file.name;
+						cb();
 					}, 
 					function () {
 						console.log("Error decoding the input file");
@@ -443,6 +559,18 @@ document.addEventListener('DOMContentLoaded', () => {
 		}
 	}
 
+	function playPause(value) {
+		if ((value == undefined && ctx.state == 'running') || value == false) {
+			ctx.suspend();
+			document.getElementById("bOut").classList.add('is-warning');
+			document.getElementById("bOut").classList.remove('is-success');
+		}
+		else {
+			ctx.resume();
+			document.getElementById("bOut").classList.remove('is-warning');
+			document.getElementById("bOut").classList.add('is-success');
+		}
+	}
 
 	const code_examples = {};
 	fetch("code_examples/amp.crm").then(x => x.text()).then(y => {
@@ -459,11 +587,11 @@ document.addEventListener('DOMContentLoaded', () => {
 			cs: "fr"
 		}
 	});
-	fetch("code_examples/EQRegalia.crm").then(x => x.text()).then(y => {
+	fetch("code_examples/EQregalia.crm").then(x => x.text()).then(y => {
 		code_examples["eqr"] = {
 			code: y,
 			ib: "EQregalia",
-			cs: "low, med, high"
+			cs: "low, high, peak"
 		}
 	});
 	fetch("code_examples/lp_wdf.crm").then(x => x.text()).then(y => {
@@ -529,7 +657,7 @@ document.addEventListener('DOMContentLoaded', () => {
 	    <button class="button" aria-haspopup="true" aria-controls="dropdown-menu">
 	      <span>Examples</span>
 	      	<span class="icon is-small">
-        		<i class="fa fa-angle-down" aria-hidden="true"></i>
+	      		▼
      		</span>
 	    </button>
 	  </div>
@@ -571,18 +699,16 @@ document.addEventListener('DOMContentLoaded', () => {
 			<div class="column is-2 buttons is-bordered">
 				<div class="box">
 					<h5 class="title is-5">IN</h5>
-					<button class="button is-fullwidth" title="Microphone" id="bMic" onclick="buttonMicF()"><i class="fa fa-microphone fa-2x" aria-hidden="true"></i></button>
+					<button class="button is-fullwidth" title="Microphone" id="bMic" onclick="buttonMicF()">
+						<label class="is-size-3">🎙</label>
+					</button>
 
 					<button class="button is-fullwidth" id="bSFi" onclick="buttonServerFileF()">
-				      	<span class="icon is-small">
-							<i class='fa fa-random fa-2x'></i>
-				     	</span>
+				      	<label class="is-size-3">⤮</label>
 				    </button>
 
 					<button class="button is-fullwidth" id="bUFi" onclick="document.getElementById('audiofile').click()">
-				      	<span class="icon is-small">
-							<i class='fa fa-upload fa-2x'></i>
-				     	</span>
+						<label class="is-size-3">🗀</label>
 				    </button>
 
 					<p class="is-size-6" id="playinglabel">Playing: none</p>
@@ -604,8 +730,9 @@ document.addEventListener('DOMContentLoaded', () => {
 			<div class="column is-2 buttons is-bordered">
 				<div class="box">
 					<h5 class="title is-5 is-centered">OUT</h5>
-					<button class="button is-normal is-fullwidth" title="Playing status"><i class="fa fa-volume-up fa-2x" aria-hidden="true"></i>
-</button>
+					<button class="button is-normal is-fullwidth" title="Playing status" onclick="playPause()" id="bOut">
+						<label class="is-size-3">🕪</label>
+					</button>
 				</div>
 			</div>
 		</div>
