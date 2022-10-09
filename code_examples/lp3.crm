@@ -1,0 +1,9 @@
+y = lp1 (x, fr) {
+	y_z1 = delay1(y)
+	y = y_z1 + fr * (x - y_z1)
+	@y = 0
+}
+
+y = lp3 (x, fr) {
+	y = lp1(lp1(lp1(x, fr), fr), fr)
+}

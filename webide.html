@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ciaramella webIDE</title>
 <link rel="stylesheet" href="bulma.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
 <script>
 document.addEventListener('DOMContentLoaded', () => {
 
@@ -48,7 +49,7 @@ document.addEventListener('DOMContentLoaded', () => {
 	    font-family: lucida console, courier new, courier, monospace;
 	    margin: 0;
 	    padding: 10px 0;
-	    height: 45vh;
+	    height: 51vh;
 	    border-radius: 0;
 	    resize: none;
 	    font-size: 16px;
@@ -74,6 +75,7 @@ document.addEventListener('DOMContentLoaded', () => {
 		background-color:#3E3D32;
 		border-color:#3E3D32;
 		color:#928869;
+		flex:none;
 	}
 	.codeEditor {
 		padding-left: calc(3.5rem + 5px);
@@ -82,6 +84,8 @@ document.addEventListener('DOMContentLoaded', () => {
 		background-color:#272822;
 		border-color:#272822;
 		color:#ffffff;
+		white-space: pre;
+		flex:1;
 	}
 	.console {
 		background-color:#111111;
@@ -121,12 +125,13 @@ document.addEventListener('DOMContentLoaded', () => {
 			if (keyCode === 9) {  // TAB = 9
 				e.preventDefault();
 				codeEditor.value = value.slice(0, selectionStart) + '\t' + value.slice(selectionEnd);
-				codeEditor.setSelectionRange(selectionStart+2, selectionStart+2)
+				codeEditor.setSelectionRange(selectionStart+1, selectionStart+1)
 			}
 		});
 
 		let lineCountCache = 0;
 		function line_counter() {
+			codeEditor.cols = 40
 			let lineCount = codeEditor.value.split('\n').length;
 			let outarr = new Array();
 			if (lineCountCache != lineCount) {
@@ -169,20 +174,22 @@ document.addEventListener('DOMContentLoaded', () => {
 		tab.parentNode.parentNode.ted.parentNode.removeChild(tab.parentNode.parentNode.ted)
 		ul.removeChild(tab.parentNode.parentNode)
 		if (ul.getElementsByTagName("li").length <= 1)
-			newTab(document.getElementById("newTabB"))
+			newTab()
 		else if (wasactive) {
 			selectTab(ul.children[ul.children.length - 2])
 		}
 	}
 
-	function newTab (e) {
+	function newTab (title="Untitled.crm") {
+		let newTabB = document.getElementById("newTabB");
 		let li = document.createElement("li")
 		li.onclick = () => selectTab(li)
-		li.innerHTML = "<a><span>Untitled.crm</span>&nbsp; <span class='has-text-danger' onclick='closeTab(this)'>✖</span></a>"
-		e.parentNode.insertBefore(li, e)
+		li.innerHTML = "<a><span>" + title + "</span>&nbsp; <span class='has-text-danger' onclick='closeTab(this)'>✖</span></a>"
+		newTabB.parentNode.insertBefore(li, newTabB);
 		let ted = newTextEditor()
 		li.ted = ted
 		selectTab(li)
+		return ted;
 	}
 
 	function selectTab (e) {
@@ -196,8 +203,34 @@ document.addEventListener('DOMContentLoaded', () => {
 		e.ted.hidden = false
 	}
 
+	function loadExample (id) {
+		let activeTed = getActiveTED();
+		let codeArea = activeTed.children[0].children[1];
+		let ted;
+		if (!codeArea.value || codeArea.value == "") {
+			ted = activeTed;
+		}
+		else {
+			ted = newTab(id + ".crm");
+		}
+
+		ted.children[0].children[1].value = code_examples[id].code;
+		ted.children[1].children[0].value = code_examples[id].ib;
+		ted.children[1].children[1].value = code_examples[id].cs;
+
+	}
+
 	window.onload = function () {
-		let tab = newTab(document.getElementById("newTabB"))
+		newTab();
+		let examples_items = document.getElementById("examples").children;
+		for (let i of examples_items)
+			i.onclick = (e) => loadExample(e.target.id);
+
+		let examples_dropdown = document.getElementById("examples_dropdown");
+		examples_dropdown.addEventListener('click', function(event) {
+			event.stopPropagation();
+			examples_dropdown.classList.toggle('is-active');
+		});
 	}
 
 	function getActiveTED () {
@@ -274,9 +307,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
 		node = new AudioWorkletNode(ctx, "PluginProcessor", { outputChannelCount: [1] });
 		node.connect(ctx.destination);
-		if (!streamMic)
-			streamMic = await navigator.mediaDevices.getUserMedia({ audio: { autoGainControl: false, echoCancellation: false, noiseSuppression: false, latency: 0.005 } });
-		inputNode = ctx.createMediaStreamSource(streamMic);
+		
+		if (!inputNode) {
+			await buttonMicF();
+			return;
+		}
+
 		inputNode.connect(node);
 	}
 
@@ -312,7 +348,6 @@ document.addEventListener('DOMContentLoaded', () => {
 			let activeTed = getActiveTED()
 			var output = compile(activeTed, document.getElementById("target_lang").value)
 			for (let o = 0; o < output.length; o++) {
-				console.log(output[o])
 				exportViewDiv.innerHTML += '\
 					<div>\
 						<label class="label">' + output[o].name + '</label>\
@@ -349,6 +384,95 @@ document.addEventListener('DOMContentLoaded', () => {
 	    element.click();
 	    document.body.removeChild(element);
 	}
+
+	async function buttonMicF () {
+		if (!streamMic)
+			streamMic = await navigator.mediaDevices.getUserMedia({ audio: { autoGainControl: false, echoCancellation: false, noiseSuppression: false, latency: 0.005 } });
+		if (inputNode)
+			inputNode.disconnect();
+		inputNode = ctx.createMediaStreamSource(streamMic);
+
+		inputNode.connect(node);
+
+		document.getElementById("bMic").classList.add("is-success");
+		document.getElementById("bSFi").classList.remove("is-success");
+		document.getElementById("bUFi").classList.remove("is-success");
+		document.getElementById("playinglabel").innerHTML = "Playing: Microphone";
+	}
+
+	function buttonServerFileF () {
+
+	}
+
+
+	function buttonUserFileF (files) {
+		if (files.length == 0)
+			return
+		if (!ctx)
+			return
+
+		uploadFile(files[0])
+
+		function uploadFile(file) {
+			var fileReader = new FileReader();
+			fileReader.readAsArrayBuffer(file);
+			fileReader.onload = function(e) {
+				console.log((" Loaded. Filename: '" + file.name + "'"), ( "(" + ((Math.floor(file.size/1024/1024*100))/100) + " MB)" ));
+				ctx.decodeAudioData(e.target.result, 
+					function(buffer) {
+						console.log("sampleRate = " + buffer.sampleRate + "; numberOfChannels = " + buffer.numberOfChannels)
+						if (inputNode)
+							inputNode.disconnect();
+						inputNode = ctx.createBufferSource();
+						inputNode.connect(node);
+						inputNode.buffer = buffer;
+						inputNode.loop = true;
+						inputNode.start(0);
+
+						document.getElementById("bMic").classList.remove("is-success");
+						document.getElementById("bSFi").classList.remove("is-success");
+						document.getElementById("bUFi").classList.add("is-success");
+						document.getElementById("playinglabel").innerHTML = "Playing: " + file.name;
+					}, 
+					function () {
+						console.log("Error decoding the input file");
+					}
+				);
+
+			}
+		}
+	}
+
+
+	const code_examples = {};
+	fetch("code_examples/amp.crm").then(x => x.text()).then(y => {
+		code_examples["amp"] = {
+			code: y,
+			ib: "amp",
+			cs: "level"
+		}
+	});
+	fetch("code_examples/lp3.crm").then(x => x.text()).then(y => {
+		code_examples["lp3"] = {
+			code: y,
+			ib: "lp3",
+			cs: "fr"
+		}
+	});
+	fetch("code_examples/EQRegalia.crm").then(x => x.text()).then(y => {
+		code_examples["eqr"] = {
+			code: y,
+			ib: "EQregalia",
+			cs: "low, med, high"
+		}
+	});
+	fetch("code_examples/lp_wdf.crm").then(x => x.text()).then(y => {
+		code_examples["wdf"] = {
+			code: y,
+			ib: "lp_filter",
+			cs: "cutoff"
+		}
+	});
 
 </script>
 </head>
@@ -397,13 +521,31 @@ document.addEventListener('DOMContentLoaded', () => {
 <div class="container">
 
 	<div class="notification is-warning">
-		<p>This webIDE is a work in progress, certain functions are known to not work properly or at all.</p>
-		<p><strong>Use at your own risk!</strong></p>
+		<p>This webIDE is a work in progress, certain functions are known to not work properly or at all. <strong>Use at your own risk!</strong></p>
+	</div>
+
+	<div id=examples_dropdown class="dropdown">
+	  <div class="dropdown-trigger">
+	    <button class="button" aria-haspopup="true" aria-controls="dropdown-menu">
+	      <span>Examples</span>
+	      	<span class="icon is-small">
+        		<i class="fa fa-angle-down" aria-hidden="true"></i>
+     		</span>
+	    </button>
+	  </div>
+	  <div class="dropdown-menu" id="dropdown-menu" role="menu">
+	    <div class="dropdown-content" id="examples">
+	    	<a class="dropdown-item" id="amp">Amplifier</a>
+		    <a class="dropdown-item" id="lp3">Three poles LP filter</a>
+		    <a class="dropdown-item" id="wdf">Wave Digital Filter</a>
+		    <a class="dropdown-item" id="eqr">Equalizer Regalia</a>
+	    </div>
+	  </div>
 	</div>
 
 	<div id="tabs" class="tabs is-boxed is-centered is-normal">
 		<ul>	
-			<li onclick="newTab(this)" id="newTabB"><a><span>✚</span></a></li>
+			<li onclick="newTab()" id="newTabB"><a><span>✚</span></a></li>
 		</ul>
 	</div>
 
@@ -429,9 +571,22 @@ document.addEventListener('DOMContentLoaded', () => {
 			<div class="column is-2 buttons is-bordered">
 				<div class="box">
 					<h5 class="title is-5">IN</h5>
-					<button class="button is-normal is-success is-light is-fullwidth">🎙</button>
-					<button class="button is-normal is-outlined is-fullwidth">File</button>
-					<button class="button is-normal is-outlined is-fullwidth">File</button>
+					<button class="button is-fullwidth" title="Microphone" id="bMic" onclick="buttonMicF()"><i class="fa fa-microphone fa-2x" aria-hidden="true"></i></button>
+
+					<button class="button is-fullwidth" id="bSFi" onclick="buttonServerFileF()">
+				      	<span class="icon is-small">
+							<i class='fa fa-random fa-2x'></i>
+				     	</span>
+				    </button>
+
+					<button class="button is-fullwidth" id="bUFi" onclick="document.getElementById('audiofile').click()">
+				      	<span class="icon is-small">
+							<i class='fa fa-upload fa-2x'></i>
+				     	</span>
+				    </button>
+
+					<p class="is-size-6" id="playinglabel">Playing: none</p>
+					
 				</div>
 			</div>
 			<div class="column is-8">
@@ -449,12 +604,13 @@ document.addEventListener('DOMContentLoaded', () => {
 			<div class="column is-2 buttons is-bordered">
 				<div class="box">
 					<h5 class="title is-5 is-centered">OUT</h5>
-					<button class="button is-success is-light is-normal is-fullwidth">🔊</button>
+					<button class="button is-normal is-fullwidth" title="Playing status"><i class="fa fa-volume-up fa-2x" aria-hidden="true"></i>
+</button>
 				</div>
 			</div>
 		</div>
 	</div>
-
+<input hidden type="file" id="audiofile" name="audiofile" accept="audio/*" onchange="buttonUserFileF(this.files)"><br>
 
 	<div class="container">
 		<div class="box">
