@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ciaramella webIDE</title>
 <link rel="stylesheet" href="bulma.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
@@ -704,15 +705,15 @@ document.addEventListener('DOMContentLoaded', () => {
 				<div class="box">
 					<h5 class="title is-5">IN</h5>
 					<button class="button is-fullwidth" title="Microphone" id="bMic" onclick="buttonMicF()">
-						<label class="is-size-3">🎙</label>
+						<i class="fa fa-microphone fa-2x" aria-hidden="true"></i>
 					</button>
 
 					<button class="button is-fullwidth" id="bSFi" onclick="buttonServerFileF()">
-				      	<label class="is-size-3">⤮</label>
+				      	<i class='fa fa-random fa-2x'></i> 
 				    </button>
 
 					<button class="button is-fullwidth" id="bUFi" onclick="document.getElementById('audiofile').click()">
-						<label class="is-size-3">🗀</label>
+						<i class='fa fa-upload fa-2x'></i>
 				    </button>
 
 					<p class="is-size-6" id="playinglabel">Playing: none</p>
@@ -735,7 +736,7 @@ document.addEventListener('DOMContentLoaded', () => {
 				<div class="box">
 					<h5 class="title is-5 is-centered">OUT</h5>
 					<button class="button is-normal is-fullwidth" title="Playing status" onclick="playPause()" id="bOut">
-						<label class="is-size-3">🕪</label>
+						<i class="fa fa-volume-up fa-2x" aria-hidden="true"></i>
 					</button>
 				</div>
 			</div>
