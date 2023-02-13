@@ -606,6 +606,13 @@ document.addEventListener('DOMContentLoaded', () => {
 			cs: "cutoff"
 		}
 	});
+	fetch("code_examples/saw_generator.crm").then(x => x.text()).then(y => {
+		code_examples["saw_generator"] = {
+			code: y,
+			ib: "saw_generator",
+			cs: "enable, frequency"
+		}
+	});
 
 </script>
 </head>
@@ -672,6 +679,7 @@ document.addEventListener('DOMContentLoaded', () => {
 		    <a class="dropdown-item" id="lp3">Three poles LP filter</a>
 		    <a class="dropdown-item" id="wdf">Wave Digital Filter</a>
 		    <a class="dropdown-item" id="eqr">Equalizer Regalia</a>
+		    <a class="dropdown-item" id="saw_generator">Saw Generator</a>
 	    </div>
 	  </div>
 	</div>
