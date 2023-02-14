@@ -613,6 +613,13 @@ document.addEventListener('DOMContentLoaded', () => {
 			cs: "enable, frequency"
 		}
 	});
+	fetch("code_examples/decimator.crm").then(x => x.text()).then(y => {
+		code_examples["decimator"] = {
+			code: y,
+			ib: "decimator",
+			cs: ""
+		}
+	});
 
 </script>
 </head>
@@ -679,6 +686,7 @@ document.addEventListener('DOMContentLoaded', () => {
 		    <a class="dropdown-item" id="lp3">Three poles LP filter</a>
 		    <a class="dropdown-item" id="wdf">Wave Digital Filter</a>
 		    <a class="dropdown-item" id="eqr">Equalizer Regalia</a>
+		    <a class="dropdown-item" id="decimator">Decimator</a>
 		    <a class="dropdown-item" id="saw_generator">Saw Generator</a>
 	    </div>
 	  </div>

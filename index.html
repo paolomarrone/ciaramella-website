@@ -223,6 +223,59 @@ yL, yR = lp3stereo (xL, xR, volumeL, volumeR) {
 }
 </pre>
 </div>
+
+
+		<br>
+		<h4 class="title is-4">if-then-else</h4>
+			<p>We lately introduced if-then-else constructs. They are defined like blocks in the usual fully declarative style</p>
+
+<div class="highlight has-background-dark is-fluid p-1 has-text-light"><pre>
+y = decimator(x) {
+	y, s = if (delay1(s)) {
+		y = x
+		s = 0
+	} else {
+		y = delay1(t)
+		s = 1
+	}
+	t = y
+	@s = 1
+	@y = 0
+}
+</pre>
+</div>
+
+<p>A cool feature is the possibility to use state (delay) within branches. For example:</p>
+
+<div class="highlight has-background-dark is-fluid p-1 has-text-light"><pre>
+y = saw_generator(enable, frequency) {
+	y = if (enable > 0.5) {
+		phaseInc = mapFreq(frequency) / fs
+		phase = frac(delay1(phase) + phaseInc)
+		@phase = 0
+		y = 2 * phase - 1
+	} else {
+		y = 0
+	}
+}
+
+y = mapFreq (fr) {
+	y = fr * fr * fr * 10000 + 20
+}
+
+# Only for fs >= 10020
+y = frac (x) {
+	y = if (x >= 1) {
+		y = x - 1
+	} else {
+		y = x
+	}
+}
+</pre>
+</div>
+phase is only visible within the first branch and gets updated only when then codition is met.
+
+
 	<hr>
 	<h2 class="title is-2">Compilation</h2>	
 
