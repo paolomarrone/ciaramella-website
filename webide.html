@@ -262,25 +262,34 @@ document.addEventListener('DOMContentLoaded', () => {
 		}
 	}
 
-	function compile (activeTed, target_lang) {
-		let code = activeTed.children[0].children[1].value
+	function getInput (ted) {
+		let code = ted.children[0].children[1].value
 		if (!code || code == "")
 			throw new Error("Empty Code")
 
-		let initial_block = activeTed.children[1].children[0].value
+		let initial_block = ted.children[1].children[0].value
 		if (!initial_block || initial_block == "")
 			throw new Error("No initial block declared")
 
-		let control_inputsS = activeTed.children[1].children[1].value
+		let control_inputsS = ted.children[1].children[1].value
 		let control_inputs = control_inputsS.split(",").map(x => x.trim())
 
-		let inputInitialValuesS = activeTed.children[1].children[2].value
+		let inputInitialValuesS = ted.children[1].children[2].value
 		inputInitialValues = {}
 		inputInitialValuesS.split(',').map(o => o.trim()).map(o => o.split('=')).forEach(e => inputInitialValues[e[0]] = e[1])
+
+		return {
+			code: code,
+			initial_block: initial_block,
+			control_inputs: control_inputs,
+			inputInitialValues: inputInitialValues
+		}
+	}
+
+	function compile (ted, target_lang) {
+		let input = getInput(ted)
 		let debug = false
-
-		let output = zampogna.compile(null, debug, code, initial_block, control_inputs, inputInitialValues, target_lang)
-
+		let output = zampogna.compile(null, debug, input.code, input.initial_block, input.control_inputs, input.inputInitialValues, target_lang)
 		return output
 	}
 
@@ -622,6 +631,43 @@ document.addEventListener('DOMContentLoaded', () => {
 		}
 	});
 
+
+
+	function toDynplug () {
+
+		let dynplugConsoleDiv = document.getElementById("dynplugConsoleDiv")
+		dynplugConsoleDiv.innerHTML = ""
+
+		try {
+			let activeTed = getActiveTED();
+			let input = getInput(activeTed);
+			let compserveraddress = document.getElementById("compserveraddress").value;
+			let dynpserveraddress = document.getElementById("dynpserveraddress").value;
+			crmToDynplug.ciaramellaToDynplug(
+				zampogna, 
+				input.code, 
+				input.initial_block, 
+				input.control_inputs, 
+				input.inputInitialValues, 
+				compserveraddress, 10002, 
+				dynpserveraddress, 10001,
+				function (msg) {
+					dynplugConsoleDiv.innerHTML += "Correctly compiled and sent to dynplug";
+				},
+				function (msg) {
+					dynplugConsoleDiv.innerHTML += "Error: \n" + msg;
+				}
+			);
+		}
+		catch (e) {
+			dynplugConsoleDiv.innerHTML += "Error: \n" + e
+			return
+		}
+
+
+	} 
+
+
 </script>
 </head>
 
@@ -801,10 +847,10 @@ document.addEventListener('DOMContentLoaded', () => {
 			<label class="label">Insert compilation server and dynplug coordinates</label>
 			<div class="container">
 				<div class="is-medium">
-					<input class="input is-warning" type="text" title="Compilation server address" placeholder="E.g.: localhost">
+					<input class="input is-warning" type="text" id="compserveraddress" title="Compilation server address" placeholder="E.g.: 127.0.0.1">
 				</div>
 				<div class="is-medium">
-					<input class="input is-warning" type="text" title="Dynplug address" placeholder="E.g.: localhost">
+					<input class="input is-warning" type="text" id="dynpserveraddress" title="Dynplug address" placeholder="E.g.: localhost">
 				</div>
 
 				<button class="button is-primary is-medium" onclick="toDynplug()">Compile & Send</button>
@@ -812,9 +858,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 			<br>
 
-			<div id="exportConsoleDiv" class="container has-background-danger">
-				Output here
-			</div>
+			<textarea id="dynplugConsoleDiv" class="textarea is-warning console" placeholder="Console messages" readonly>Console messages...</textarea>
 		</div>
 	</div>
 
