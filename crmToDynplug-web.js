@@ -8,7 +8,7 @@
 		return compiler.compile(null, false, code, initial_block, control_inputs, initial_values, 'yaaaeapa');
 	}
 
-	exports.yaaaeapaToSharedLibrary = async function (files, compilationServerUrl, compilationServerPort, onSuccessCb, onFailureCb) {
+	exports.yaaaeapaToSharedLibrary = async function (files, compilationServerUrl, compilationServerPort, arch, onSuccessCb, onFailureCb) {
 
 		const postData = JSON.stringify(files);
 		
@@ -22,6 +22,7 @@
 				headers: {
 					'Content-Type': 'application/json',
 					'Content-Length': Buffer.byteLength(postData),
+					'Target-arch': arch
 				}
 			}, (res) => {
 				var bufs = [];
@@ -85,11 +86,11 @@
 		req.end(); 
 	}
 
-	exports.ciaramellaToDynplug = async function (compiler, code, initial_block, control_inputs, initial_values, compilationServerUrl, compilationServerPort, dynplugServerUrl, dynplugServerPort, onSuccessCb, onFailureCb) {
+	exports.ciaramellaToDynplug = async function (compiler, code, initial_block, control_inputs, initial_values, compilationServerUrl, compilationServerPort, arch, dynplugServerUrl, dynplugServerPort, onSuccessCb, onFailureCb) {
 		try {
 			let ff = exports.ciaramellaToYaaaeapa(compiler, code, initial_block, control_inputs, initial_values);
 		
-			exports.yaaaeapaToSharedLibrary(ff, compilationServerUrl, compilationServerPort, 
+			exports.yaaaeapaToSharedLibrary(ff, compilationServerUrl, compilationServerPort, arch,
 				function (data) {
 					exports.sharedLibraryToDynplug(data, dynplugServerUrl, dynplugServerPort, 
 						onSuccessCb, 

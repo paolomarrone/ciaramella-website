@@ -635,21 +635,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
 	function toDynplug () {
 
-		let dynplugConsoleDiv = document.getElementById("dynplugConsoleDiv")
+		const dynplugConsoleDiv = document.getElementById("dynplugConsoleDiv")
 		dynplugConsoleDiv.innerHTML = ""
 
 		try {
-			let activeTed = getActiveTED();
-			let input = getInput(activeTed);
-			let compserveraddress = document.getElementById("compserveraddress").value;
-			let dynpserveraddress = document.getElementById("dynpserveraddress").value;
+			const activeTed = getActiveTED();
+			const input = getInput(activeTed);
+			const compserveraddress = document.getElementById("compserveraddress").value;
+			const dynpserveraddress = document.getElementById("dynpserveraddress").value;
+			const arch = document.getElementById("dynparch").value
 			crmToDynplug.ciaramellaToDynplug(
 				zampogna, 
 				input.code, 
 				input.initial_block, 
 				input.control_inputs, 
 				input.inputInitialValues, 
-				compserveraddress, 10002, 
+				compserveraddress, 10002,
+				arch,
 				dynpserveraddress, 10001,
 				function (msg) {
 					dynplugConsoleDiv.innerHTML += "Correctly compiled and sent to dynplug";
@@ -856,6 +858,12 @@ document.addEventListener('DOMContentLoaded', () => {
 				<div class="is-medium">
 					<input class="input is-warning" type="text" id="dynpserveraddress" title="Dynplug address" placeholder="E.g.: localhost">
 				</div>
+				<div class="select is-medium">
+				<select id="dynparch">
+					<option value="x86_64">x86_64</option>
+					<option value="arm64">arm64</option>
+				</select>
+			</div>
 
 				<button class="button is-primary is-medium" onclick="toDynplug()">Compile & Send</button>
 			</div>
