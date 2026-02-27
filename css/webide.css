@@ -1,0 +1,127 @@
+.webide-layout {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.webide-panel {
+  padding: 1.5rem;
+}
+
+.examples-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.editor-shell + .editor-shell {
+  margin-top: 1rem;
+}
+
+.editor-pane {
+  position: relative;
+}
+
+.codeEditor,
+.lineCounter {
+  font-family: "Lucida Console", "Courier New", Courier, monospace;
+  margin: 0;
+  padding: 10px 0;
+  height: 51vh;
+  border-radius: 0.9rem;
+  resize: none;
+  font-size: 16px;
+  line-height: 1.2;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.lineCounter:focus-visible,
+.codeEditor:focus-visible {
+  outline: none;
+}
+
+.lineCounter {
+  display: flex;
+  border-color: transparent;
+  overflow-y: hidden;
+  text-align: right;
+  box-shadow: none;
+  position: absolute;
+  width: 3.2rem;
+  background-color: #191d28;
+  border-color: #191d28;
+  color: #7f8aa3;
+  flex: none;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.codeEditor {
+  padding-left: calc(4rem + 5px);
+  width: 100%;
+  background-color: #0f172a;
+  border-color: #0f172a;
+  color: #f8fafc;
+  white-space: pre;
+  flex: 1;
+}
+
+.editor-controls {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.console {
+  background-color: #101826;
+  color: #f8fafc;
+}
+
+.codeView {
+  background-color: #192235;
+  color: #e7edf9;
+  font-family: "Lucida Console", "Courier New", Courier, monospace;
+}
+
+.transport-grid {
+  display: grid;
+  grid-template-columns: 14rem minmax(0, 1fr) 10rem;
+  gap: 1rem;
+}
+
+.transport-box {
+  height: 100%;
+}
+
+.transport-buttons .button + .button {
+  margin-top: 0.75rem;
+}
+
+.transport-status {
+  margin-top: 0.75rem;
+}
+
+.export-actions {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.tab-close {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+@media screen and (max-width: 1023px) {
+  .editor-controls,
+  .transport-grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,130 @@
+:root {
+  --page-bg: #f4f5f7;
+  --surface: #ffffff;
+  --surface-strong: #111827;
+  --ink: #172033;
+  --ink-soft: #52607a;
+  --accent: #2f6fed;
+  --accent-soft: #dfe8ff;
+  --border: #d7dfec;
+}
+
+html {
+  background: var(--page-bg);
+}
+
+body {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background:
+    radial-gradient(circle at top right, rgba(47, 111, 237, 0.08), transparent 28rem),
+    linear-gradient(180deg, #f7f8fb 0%, #eef2f8 100%);
+  color: var(--ink);
+}
+
+a {
+  transition: color 0.2s ease;
+}
+
+.site-main {
+  flex: 1;
+  padding: 1.5rem 0 3rem;
+}
+
+.page-container {
+  width: min(1100px, calc(100% - 2rem));
+  margin: 0 auto;
+}
+
+.site-navbar {
+  box-shadow: 0 10px 30px rgba(8, 15, 30, 0.25);
+}
+
+.site-navbar .navbar-item.is-active {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+
+.site-brand {
+  gap: 0.75rem;
+}
+
+.site-brand:hover {
+  background: transparent;
+}
+
+.site-brand-logo {
+  max-height: 2.5rem;
+}
+
+.site-brand-title {
+  margin: 0;
+  line-height: 1;
+}
+
+.panel-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  box-shadow: 0 18px 50px rgba(17, 24, 39, 0.08);
+}
+
+.panel-card.is-dark {
+  background:
+    radial-gradient(circle at top right, rgba(95, 146, 255, 0.22), transparent 14rem),
+    linear-gradient(145deg, #14213d 0%, #0b1021 100%);
+  border-color: rgba(255, 255, 255, 0.08);
+  color: #f8faff;
+}
+
+.section-stack > * + * {
+  margin-top: 1.5rem;
+}
+
+.code-block {
+  border-radius: 0.9rem;
+  background: #0f172a;
+  color: #eff6ff;
+  overflow-x: auto;
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.12);
+}
+
+.code-block pre {
+  margin: 0;
+  padding: 1rem 1.1rem;
+  white-space: pre-wrap;
+  font-size: 0.95rem;
+  line-height: 1.55;
+}
+
+.muted-copy {
+  color: var(--ink-soft);
+}
+
+.site-footer {
+  background: transparent;
+  padding-top: 0;
+}
+
+.site-footer .content {
+  width: min(1100px, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: 1.25rem 1.5rem;
+  border-top: 1px solid var(--border);
+  color: var(--ink-soft);
+}
+
+@media screen and (max-width: 768px) {
+  .site-main {
+    padding-top: 1rem;
+  }
+
+  .page-container {
+    width: min(100%, calc(100% - 1rem));
+  }
+
+  .site-brand-title {
+    font-size: 1.1rem;
+  }
+}

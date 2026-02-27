@@ -1,825 +1,134 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Ciaramella webIDE</title>
-<link rel="stylesheet" href="bulma.min.css">
+<title>Ciaramella Web Playground</title>
+<link rel="icon" href="assets/images/favicon.ico">
+<link rel="stylesheet" href="css/bulma.min.css">
+<link rel="stylesheet" href="css/main.css">
+<link rel="stylesheet" href="css/webide.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
-
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-
-  // Get all "navbar-burger" elements
-  const $navbarBurgers = Array.prototype.slice.call(document.querySelectorAll('.navbar-burger'), 0);
-
-  // Check if there are any navbar burgers
-  if ($navbarBurgers.length > 0) {
-
-    // Add a click event on each of them
-    $navbarBurgers.forEach( el => {
-      let target = el.dataset.target;
-      let $target = document.getElementById(target);
-        
-      el.addEventListener('click', () => {
-        // Toggle the "is-active" class on both the "navbar-burger" and the "navbar-menu"
-        el.classList.toggle('is-active');
-        $target.classList.toggle('is-active');
-
-      });
-      
-      const $navbarItems = Array.prototype.slice.call($target.querySelectorAll('.navbar-item'), 0);
-        if ($navbarItems.length > 0) {
-			$navbarItems.forEach( it => {
-				it.addEventListener('click', () => {
-					el.classList.remove('is-active');
-					$target.classList.remove('is-active');
-					
-				});
-			});
-		}
-    });
-  }
-});
-</script>
-
-<script type="text/javascript" src="../zampogna-web.js"></script>
-
-<style type="text/css">
-	.codeEditor, .lineCounter {
-	    font-family: lucida console, courier new, courier, monospace;
-	    margin: 0;
-	    padding: 10px 0;
-	    height: 51vh;
-	    border-radius: 0;
-	    resize: none;
-	    font-size: 16px;
-	    line-height: 1.2;
-	    outline: none;
-	    box-sizing: border-box;
-	}
-	.lineCounter:focus-visible,
-	.codeEditor:focus-visible {
-    	outline:none;
-	}
-	.lineCounter {
-		display: flex;
-		border-color: transparent;
-		overflow-y: hidden;
-		text-align: right;
-		box-shadow: none;
-		color: #707070;
-		background-color: #d8d8d8;
-		position: absolute;
-		width: 2.7rem;
-		/* Determine appearance of line counter */
-		background-color:#3E3D32;
-		border-color:#3E3D32;
-		color:#928869;
-		flex:none;
-	}
-	.codeEditor {
-		padding-left: calc(3.5rem + 5px);
-		width:100%;
-		/* Determine appearance of code editor */
-		background-color:#272822;
-		border-color:#272822;
-		color:#ffffff;
-		white-space: pre;
-		flex:1;
-	}
-	.console {
-		background-color:#111111;
-		color:#ffffff;
-	}
-	.codeView {
-		background-color: #333333;
-		color:#dddddd;
-	}
-</style>
-
-<script type="text/javascript">
-
-	var node;
-	var ctx;
-	var inputNode;
-	var streamMic;
-		const serverFileUrls = [
-		"audiofiles/disco-beat.mp3",
-		"audiofiles/drum.mp3",
-		"audiofiles/saurus.mp3",
-		"audiofiles/short-metal.mp3",
-		"audiofiles/trance-arp.mp3",
-		"audiofiles/bass.mp3",
-		"audiofiles/bouncy-drum.mp3"
-	]
-	const serverFileBufferCache = [];
-	let serverFileSelected = 0;
-	let userFileBufferCache = null;
-	let userFileName = "";
-	let sourceSelected = null;
-
-	inputInitialValues = {};
-
-	function newTextEditor () {
-		let codeEditor = document.createElement("textarea");
-		let lineCounter = document.createElement("textarea");
-
-		lineCounter.readOnly = true
-		lineCounter.classList.add("lineCounter")
-		codeEditor.placeholder = "Code here..."
-		codeEditor.spellcheck = false
-		codeEditor.classList.add("codeEditor")
-
-		codeEditor.addEventListener('scroll', () => {
-			lineCounter.scrollTop = codeEditor.scrollTop;
-			lineCounter.scrollLeft = codeEditor.scrollLeft;
-		});
-
-		codeEditor.addEventListener('keydown', (e) => {
-			let { keyCode } = e;
-			let { value, selectionStart, selectionEnd } = codeEditor;
-			if (keyCode === 9) {  // TAB = 9
-				e.preventDefault();
-				codeEditor.value = value.slice(0, selectionStart) + '\t' + value.slice(selectionEnd);
-				codeEditor.setSelectionRange(selectionStart+1, selectionStart+1)
-			}
-		});
-
-		let lineCountCache = 0;
-		function line_counter() {
-			let lineCount = codeEditor.value.split('\n').length;
-			let outarr = new Array();
-			if (lineCountCache != lineCount) {
-				for (let x = 0; x < lineCount; x++) {
-					outarr[x] = (x + 1) + ' ';
-				}
-				lineCounter.value = outarr.join('\n');
-			}
-			lineCountCache = lineCount;
-		}
-		codeEditor.addEventListener('input', () => {
-			line_counter();
-		});
-
-		let textEditorDiv = document.createElement("div")
-		textEditorDiv.appendChild(lineCounter)
-		textEditorDiv.appendChild(codeEditor)
-		
-		let compileInputDiv = document.createElement("div")
-		compileInputDiv.classList.add("container")
-		compileInputDiv.innerHTML = (
-			'<input class="input is-danger" type="text" title="Initial block" placeholder="Initial Block. E.g.: lowpass_filter">\
-			<input class="input is-warning" type="text" title="Control inputs" placeholder="Control input. E.g.: volume, cutoff, resonance">\
-			<input class="input is-warning is-small" type="text" title="Initial input values" placeholder="Initial input values. E.g.: x = 0.5, volume = 1">'
-		)
-
-		let div = document.createElement("div")
-		div.appendChild(textEditorDiv)
-		div.appendChild(compileInputDiv)
-
-		let textEditorsDiv = document.getElementById("textEditorsDiv")
-		textEditorsDiv.appendChild(div)
-
-		return div
-	}
-
-	function closeTab (tab) {
-		let ul = tab.parentNode.parentNode.parentNode
-		let wasactive = tab.parentNode.parentNode.classList.contains("is-active")
-		tab.parentNode.parentNode.ted.parentNode.removeChild(tab.parentNode.parentNode.ted)
-		ul.removeChild(tab.parentNode.parentNode)
-		if (ul.getElementsByTagName("li").length <= 1)
-			newTab()
-		else if (wasactive) {
-			selectTab(ul.children[ul.children.length - 2])
-		}
-	}
-
-	function newTab (title="Untitled.crm") {
-		let newTabB = document.getElementById("newTabB");
-		let li = document.createElement("li")
-		li.onclick = () => selectTab(li)
-		li.innerHTML = "<a><span>" + title + "</span>&nbsp; <span class='has-text-danger' onclick='closeTab(this)'>✖</span></a>"
-		newTabB.parentNode.insertBefore(li, newTabB);
-		let ted = newTextEditor()
-		li.ted = ted
-		selectTab(li)
-		return ted;
-	}
-
-	function selectTab (e) {
-		if (!e || !e.parentNode || e.classList.contains("is-active"))
-			return
-		for (let i = 0; i < e.parentNode.children.length - 1; i++) {
-			e.parentNode.children[i].classList.remove("is-active")
-			e.parentNode.children[i].ted.hidden = true
-		}
-		e.classList.add("is-active")
-		e.ted.hidden = false
-	}
-
-	function loadExample (id) {
-		let activeTed = getActiveTED();
-		let codeArea = activeTed.children[0].children[1];
-		let ted;
-		if (!codeArea.value || codeArea.value == "") {
-			ted = activeTed;
-		}
-		else {
-			ted = newTab(id + ".crm");
-		}
-
-		ted.children[0].children[1].value = code_examples[id].code;
-		ted.children[1].children[0].value = code_examples[id].ib;
-		ted.children[1].children[1].value = code_examples[id].cs;
-
-	}
-
-	window.onload = function () {
-		newTab();
-		let examples_items = document.getElementById("examples").children;
-		for (let i of examples_items)
-			i.onclick = (e) => loadExample(e.target.id);
-
-		let examples_dropdown = document.getElementById("examples_dropdown");
-		examples_dropdown.addEventListener('click', function(event) {
-			event.stopPropagation();
-			examples_dropdown.classList.toggle('is-active');
-		});
-	}
-
-	function getActiveTED () {
-		let activeTed = null;
-		let tabs = document.getElementById("tabs")
-		let div;
-		for (let i = 0; i < tabs.children[0].children.length; i++) {
-			let li = tabs.children[0].children[i];
-			if (li.classList.contains("is-active")) {
-				return li.ted
-			}
-		}
-	}
-
-	function getInput (ted) {
-		let code = ted.children[0].children[1].value
-		if (!code || code == "")
-			throw new Error("Empty Code")
-
-		let initial_block = ted.children[1].children[0].value
-		if (!initial_block || initial_block == "")
-			throw new Error("No initial block declared")
-
-		let control_inputsS = ted.children[1].children[1].value
-		let control_inputs = control_inputsS.split(",").map(x => x.trim())
-
-		let inputInitialValuesS = ted.children[1].children[2].value
-		inputInitialValues = {}
-		inputInitialValuesS.split(',').map(o => o.trim()).map(o => o.split('=')).forEach(e => inputInitialValues[e[0]] = e[1])
-
-		return {
-			code: code,
-			initial_block: initial_block,
-			control_inputs: control_inputs,
-			inputInitialValues: inputInitialValues
-		}
-	}
-
-	function compile (ted, target_lang) {
-		let input = getInput(ted)
-		let debug = false
-		let output = zampogna.compile(null, debug, input.code, input.initial_block, input.control_inputs, input.inputInitialValues, target_lang)
-		return output
-	}
-
-	function handleInput(e) {
-		node.port.postMessage({type: "paramChange", id: e.id, value: e.value})
-	};
-	async function play (activeTed, processorStr) {
-
-		let pluginDiv = document.getElementById("pluginDiv");
-		pluginDiv.innerHTML = ""
-
-		let control_inputsS = activeTed.children[1].children[1].value
-		let control_inputs = control_inputsS.split(",").map(x => x.trim())
-		for (let c = 0; c < control_inputs.length; c++) {
-			if (!control_inputs[c] || control_inputs[c] == "")
-				continue
-			let il = inputInitialValues[control_inputs[c]];
-			if (il == undefined) il = 0;
-			pluginDiv.innerHTML += '\
-				<div class="field is-horizontal">\
-					<div class="field-label is-normal">\
-						<label class="label">' + control_inputs[c] + '</label>\
-					</div>\
-					<div class="field-body">\
-						<div class="field">\
-							<p class="control">\
-								<input class="input is-primary" type="range" \
-								id=' + control_inputs[c] + ' name=' + control_inputs[c] + 
-								' min=0 max=1 value="' + il + '"" step="any" oninput="handleInput(this)">\
-							</p>\
-						</div>\
-					</div>\
-				</div>\
-			'
- 		}
-
-		let scriptUrl = URL.createObjectURL(new Blob([processorStr], {type: "text/javascript"}));
-		if (ctx)
-			await ctx.close()
-		ctx = new (window.AudioContext || window.webkitAudioContext)();
-		await ctx.audioWorklet.addModule(scriptUrl);
-
-		node = new AudioWorkletNode(ctx, "PluginProcessor", { outputChannelCount: [1] });
-		node.connect(ctx.destination);
-		
-		if (!inputNode) {
-			await buttonServerFileF();
-			return;
-		}
-		else {
-			if (sourceSelected == 'MIC')
-				buttonMicF();
-			else if (sourceSelected == 'SFI')
-				buttonServerFileF(1);
-			else if (sourceSelected == 'UFI')
-				buttonUserFileF([], 1);
-		}
-
-		inputNode.connect(node);
-	}
-
-	function compileAndPlay () {
-		let activeTed = getActiveTED()
-		try {
-			var processorStr = compile(activeTed, "js")[1].str
-			document.getElementById("consoleTA").innerHTML = "Compiled successfully"
-		}
-		catch (e) {
-			document.getElementById("consoleTA").innerHTML = e
-			return
-		}
-
-		try {
-			play(activeTed, processorStr)
-		}
-		catch (e) {
-			throw e
-		}
-	}
-
-	function compileAndView () {
-
-		let exportConsoleDiv = document.getElementById("exportConsoleDiv")
-		exportConsoleDiv.innerHTML = ""
-		let exportViewDiv = document.getElementById("exportViewDiv")
-		exportViewDiv.innerHTML = ""
-		let exportSaveDiv = document.getElementById("exportSaveDiv")
-		exportSaveDiv.innerHTML = ""
-
-		try {
-			let activeTed = getActiveTED()
-			var output = compile(activeTed, document.getElementById("target_lang").value)
-			for (let o = 0; o < output.length; o++) {
-				exportViewDiv.innerHTML += '\
-					<div>\
-						<label class="label">' + output[o].name + '</label>\
-						<textarea class="textarea codeView" readonly rows=19>'+
-							output[o].str +
-						'</textarea>\
-					</div><br>\
-				'
-			}
-		}
-		catch (e) {
-			exportConsoleDiv.innerHTML = e
-			return
-		}
-
-		let saveButton = document.createElement("button")
-		saveButton.classList.add("button")
-		saveButton.classList.add("is-primary")
-		saveButton.classList.add("is-large")
-		saveButton.innerHTML = "Download Files!"
-		saveButton.onclick = function () {
-			for (let f in output)
-				downloadtext(output[f].name, output[f].str)
-		}
-		exportSaveDiv.appendChild(saveButton)
-	}
-
-	function downloadtext(filename, text) {
-	    var element = document.createElement('a');
-	    element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
-	    element.setAttribute('download', filename);
-	    element.style.display = 'none';
-	    document.body.appendChild(element);
-	    element.click();
-	    document.body.removeChild(element);
-	}
-
-	async function buttonMicF () {
-		if (!ctx)
-			return
-		if (!streamMic)
-			streamMic = await navigator.mediaDevices.getUserMedia({ audio: { autoGainControl: false, echoCancellation: false, noiseSuppression: false, latency: 0.005 } });
-		if (inputNode)
-			inputNode.disconnect();
-		inputNode = ctx.createMediaStreamSource(streamMic);
-
-		inputNode.connect(node);
-
-		document.getElementById("bMic").classList.add("is-success");
-		document.getElementById("bSFi").classList.remove("is-success");
-		document.getElementById("bUFi").classList.remove("is-success");
-		document.getElementById("playinglabel").innerHTML = "Playing: Microphone";
-		sourceSelected = 'MIC';
-	}
-
-	function buttonServerFileF (again) {
-		if (!ctx)
-			return
-		changeSong(again ? 0 : 1)
-
-		function changeSong (direction) {
-			serverFileSelected = (serverFileSelected + direction + serverFileUrls.length) % serverFileUrls.length;
-
-			downloadSong(serverFileSelected, function () {
-				startSong(serverFileSelected);
-				playPause(true);
-				document.getElementById("bMic").classList.remove("is-success");
-				document.getElementById("bSFi").classList.add("is-success");
-				document.getElementById("bUFi").classList.remove("is-success");
-				document.getElementById("playinglabel").innerHTML = "Playing: " + serverFileUrls[serverFileSelected].split('/')[1];
-				sourceSelected = 'SFI';
-			});
-		}
-
-		function downloadSong (id, cb) {
-			if (serverFileBufferCache[id]) {
-				cb();
-				return;
-			}
-
-			GetFileObjectFromURL(serverFileUrls[id], function (fileObject) {
-			    uploadFile(fileObject, id)
-			}, id);
-
-
-			function GetFileObjectFromURL (filePathOrUrl, convertBlob, id) {
-				GetFileBlobUsingURL(filePathOrUrl, function (blob) {
-					blob.name = serverFileUrls[id];
-					convertBlob(blob);
-				});
-			};
-
-			function GetFileBlobUsingURL (url, convertBlob) {
-				var xhr = new XMLHttpRequest();
-				xhr.open("GET", url);
-				xhr.responseType = "blob";
-				xhr.addEventListener('load', function() {
-					convertBlob(xhr.response);
-				});
-				xhr.send();
-			};
-
-			function uploadFile(file, id) {
-				if (!file)
-					return;
-
-				var fileReader = new FileReader();
-				fileReader.readAsArrayBuffer(file);
-				fileReader.onload = function(e) {
-					var audioFile = e.target.result;
-					console.log(("Loaded. Filename: '" + file.name + "'"), ( "(" + ((Math.floor(file.size/1024/1024*100))/100) + " MB)" ));
-					
-					ctx.decodeAudioData(audioFile, 
-						function(buffer) {
-							console.log("sampleRate = " + buffer.sampleRate + "; numberOfChannels = " + buffer.numberOfChannels)
-						 	serverFileBufferCache[id] = buffer;
-							cb();
-						}, 
-						function() {
-							console.log("Error decoding the input file");
-						}
-					);
-				}
-			};
-		}
-
-		function startSong(id) {
-			if (inputNode)
-				inputNode.disconnect();
-
-			inputNode = ctx.createBufferSource();
-			inputNode.connect(node);
-			
-			inputNode.buffer = serverFileBufferCache[id];
-			inputNode.loop = true;
-			inputNode.start();
-		}
-
-	}
-
-
-	function buttonUserFileF (files, again) {
-		if (!ctx)
-			return;
-		if (again) {
-			cb();
-			return;
-		}
-
-		if (files.length == 0)
-			return;
-
-		function cb () {
-			if (inputNode)
-				inputNode.disconnect();
-			inputNode = ctx.createBufferSource();
-			inputNode.buffer = userFileBufferCache;
-			inputNode.loop = true;
-			inputNode.connect(node);
-			inputNode.start(0);
-
-			document.getElementById("bMic").classList.remove("is-success");
-			document.getElementById("bSFi").classList.remove("is-success");
-			document.getElementById("bUFi").classList.add("is-success");
-			document.getElementById("playinglabel").innerHTML = "Playing: " + userFileName;
-			sourceSelected = 'UFI';
-		}
-
-		uploadFile(files[0], cb);
-
-		function uploadFile(file, cb) {
-			var fileReader = new FileReader();
-			fileReader.readAsArrayBuffer(file);
-			fileReader.onload = function(e) {
-				console.log((" Loaded. Filename: '" + file.name + "'"), ( "(" + ((Math.floor(file.size/1024/1024*100))/100) + " MB)" ));
-				ctx.decodeAudioData(e.target.result, 
-					function(buffer) {
-						console.log("sampleRate = " + buffer.sampleRate + "; numberOfChannels = " + buffer.numberOfChannels)
-						userFileBufferCache = buffer;
-						userFileName = file.name;
-						cb();
-					}, 
-					function () {
-						console.log("Error decoding the input file");
-					}
-				);
-
-			}
-		}
-	}
-
-	function playPause(value) {
-		if ((value == undefined && ctx.state == 'running') || value == false) {
-			ctx.suspend();
-			document.getElementById("bOut").classList.add('is-warning');
-			document.getElementById("bOut").classList.remove('is-success');
-		}
-		else {
-			ctx.resume();
-			document.getElementById("bOut").classList.remove('is-warning');
-			document.getElementById("bOut").classList.add('is-success');
-		}
-	}
-
-	const code_examples = {};
-	fetch("code_examples/amp.crm").then(x => x.text()).then(y => {
-		code_examples["amp"] = {
-			code: y,
-			ib: "amp",
-			cs: "level"
-		}
-	});
-	fetch("code_examples/lp3.crm").then(x => x.text()).then(y => {
-		code_examples["lp3"] = {
-			code: y,
-			ib: "lp3",
-			cs: "fr"
-		}
-	});
-	fetch("code_examples/EQregalia.crm").then(x => x.text()).then(y => {
-		code_examples["eqr"] = {
-			code: y,
-			ib: "EQregalia",
-			cs: "low, high, peak"
-		}
-	});
-	fetch("code_examples/lp_wdf.crm").then(x => x.text()).then(y => {
-		code_examples["wdf"] = {
-			code: y,
-			ib: "lp_filter",
-			cs: "cutoff"
-		}
-	});
-	fetch("code_examples/saw_generator.crm").then(x => x.text()).then(y => {
-		code_examples["saw_generator"] = {
-			code: y,
-			ib: "saw_generator",
-			cs: "enable, frequency"
-		}
-	});
-	fetch("code_examples/decimator.crm").then(x => x.text()).then(y => {
-		code_examples["decimator"] = {
-			code: y,
-			ib: "decimator",
-			cs: "bypass"
-		}
-	});
-
-</script>
+<script src="js/components/site-shell.js" defer></script>
+<script src="js/vendor/zampogna-web.js" defer></script>
+<script src="js/webide.js" defer></script>
 </head>
 
 <body>
-<nav class="navbar is-dark" role="navigation" aria-label="main navigation">
-  <div class="navbar-brand">
-    <a class="navbar-item" href="index.html">
-      <img src="logo.svg" width="80" height="28">
-      <h3 class="title is-3 has-text-light">Ciaramella</h3>
-    </a>
+<site-nav current-page="webide"></site-nav>
 
-    <a role="button" class="navbar-burger" aria-label="menu" aria-expanded="false" data-target="navbarBasicExample">
-      <span aria-hidden="true"></span>
-      <span aria-hidden="true"></span>
-      <span aria-hidden="true"></span>
-    </a>
-  </div>
-
-  <div id="navbarBasicExample" class="navbar-menu">
-    <div class="navbar-start">
-      
+<main class="site-main">
+  <div class="page-container webide-layout">
+    <div class="notification is-warning">
+      <p>This web IDE is a work in progress. Certain functions are known to not work properly or at all. <strong>Use it at your own risk.</strong></p>
     </div>
 
-    <div class="navbar-end">
-    	<a class="navbar-item" href="index.html">
-        Home
-      </a>
+    <section class="panel-card webide-panel">
+      <div class="examples-toolbar">
+        <div>
+          <h1 class="title is-3">Web Playground</h1>
+          <p class="muted-copy">Edit Ciaramella code, compile it in the browser, and test it directly with Web Audio.</p>
+        </div>
 
-      <a class="navbar-item" href="papers.html">
-        Papers
-      </a>
+        <div id="examplesDropdown" class="dropdown is-right">
+          <div class="dropdown-trigger">
+            <button class="button" type="button" aria-haspopup="true" aria-controls="examples-menu" data-toggle-examples>
+              <span>Examples</span>
+              <span class="icon is-small">▼</span>
+            </button>
+          </div>
+          <div class="dropdown-menu" id="examples-menu" role="menu">
+            <div class="dropdown-content" id="examples">
+              <a class="dropdown-item" id="amp">Amplifier</a>
+              <a class="dropdown-item" id="lp3">Three poles LP filter</a>
+              <a class="dropdown-item" id="wdf">Wave Digital Filter</a>
+              <a class="dropdown-item" id="eqr">Equalizer Regalia</a>
+              <a class="dropdown-item" id="decimator">Decimator</a>
+              <a class="dropdown-item" id="saw_generator">Saw Generator</a>
+            </div>
+          </div>
+        </div>
+      </div>
 
-      <a class="navbar-item" href="https://github.com/paolomarrone/Zampogna" target="_blank">
-        Source
-      </a>
+      <div id="tabs" class="tabs is-boxed is-centered is-normal">
+        <ul>
+          <li onclick="newTab()" id="newTabB"><a><span>✚</span></a></li>
+        </ul>
+      </div>
 
-      <a class="navbar-item" href="webide.html">
-        Web Playground
-      </a>
+      <div id="textEditorsDiv"></div>
+
+      <div class="mt-4">
+        <button class="button is-primary is-medium is-fullwidth" onclick="compileAndPlay()">Compile &amp; Play</button>
+      </div>
+
+      <div class="mt-4">
+        <textarea id="consoleTA" class="textarea is-warning console" placeholder="Console messages" readonly>Console messages...</textarea>
+      </div>
+    </section>
+
+    <section class="panel-card webide-panel">
+      <div class="transport-grid">
+        <div class="box transport-box transport-buttons">
+          <h5 class="title is-5">Input</h5>
+          <button class="button is-fullwidth" title="Microphone" id="bMic" onclick="buttonMicF()">
+            <i class="fa fa-microphone fa-2x" aria-hidden="true"></i>
+          </button>
+          <button class="button is-fullwidth" id="bSFi" onclick="buttonServerFileF()">
+            <i class="fa fa-random fa-2x" aria-hidden="true"></i>
+          </button>
+          <button class="button is-fullwidth" id="bUFi" onclick="document.getElementById('audiofile').click()">
+            <i class="fa fa-upload fa-2x" aria-hidden="true"></i>
+          </button>
+          <p class="is-size-6 transport-status" id="playinglabel">Playing: none</p>
+        </div>
+
+        <div class="box transport-box">
+          <h5 class="title is-5">Plugin</h5>
+          <div id="pluginDiv">
+            <div class="field is-horizontal">
+              <label class="label">The plugin will be shown here when compiled</label>
+            </div>
+          </div>
+        </div>
+
+        <div class="box transport-box">
+          <h5 class="title is-5">Output</h5>
+          <button class="button is-normal is-fullwidth" title="Playing status" onclick="playPause()" id="bOut">
+            <i class="fa fa-volume-up fa-2x" aria-hidden="true"></i>
+          </button>
+        </div>
+      </div>
+
+      <input hidden type="file" id="audiofile" name="audiofile" accept="audio/*" onchange="buttonUserFileF(this.files)">
+    </section>
+
+    <section class="panel-card webide-panel">
+      <h4 class="title is-4">Plugin Export</h4>
+      <label class="label">Choose a target language and press "Compile &amp; View"</label>
+
+      <div class="export-actions">
+        <div class="select is-medium">
+          <select id="target_lang">
+            <option value="C">C</option>
+            <option value="yaaaeapa">C + yaaaeapa wrapper</option>
+            <option value="cpp">C++</option>
+            <option value="VST2">C++ + vst2 wrapper</option>
+            <option value="js">Javascript + Web Audio wrapper</option>
+            <option value="d">D</option>
+            <option value="MATLAB">MATLAB</option>
+          </select>
+        </div>
+        <button class="button is-primary is-medium" onclick="compileAndView()">Compile &amp; View</button>
+      </div>
+
+      <div id="exportConsoleDiv" class="notification is-danger is-light mt-4" hidden></div>
+      <div class="mt-4" id="exportViewDiv"></div>
+      <div class="mt-4" id="exportSaveDiv"></div>
+    </section>
   </div>
+</main>
 
-</nav>
-
-
-<div class="container">
-
-	<div class="notification is-warning">
-		<p>This webIDE is a work in progress, certain functions are known to not work properly or at all. <strong>Use at your own risk!</strong></p>
-	</div>
-
-	<div id=examples_dropdown class="dropdown">
-	  <div class="dropdown-trigger">
-	    <button class="button" aria-haspopup="true" aria-controls="dropdown-menu">
-	      <span>Examples</span>
-	      	<span class="icon is-small">
-	      		▼
-     		</span>
-	    </button>
-	  </div>
-	  <div class="dropdown-menu" id="dropdown-menu" role="menu">
-	    <div class="dropdown-content" id="examples">
-	    	<a class="dropdown-item" id="amp">Amplifier</a>
-		    <a class="dropdown-item" id="lp3">Three poles LP filter</a>
-		    <a class="dropdown-item" id="wdf">Wave Digital Filter</a>
-		    <a class="dropdown-item" id="eqr">Equalizer Regalia</a>
-		    <a class="dropdown-item" id="decimator">Decimator</a>
-		    <a class="dropdown-item" id="saw_generator">Saw Generator</a>
-	    </div>
-	  </div>
-	</div>
-
-	<div id="tabs" class="tabs is-boxed is-centered is-normal">
-		<ul>	
-			<li onclick="newTab()" id="newTabB"><a><span>✚</span></a></li>
-		</ul>
-	</div>
-
-	<div id="textEditorsDiv" class="container">
-	
-	</div>
-
-	<br>
-	<div class="container">
-		<button class="button is-primary is-medium is-fullwidth" onclick="compileAndPlay()">Compile & Play</button>
-	</div>
-	<br>
-	
-	<div class="container">
-		<textarea id="consoleTA" class="textarea is-warning console" placeholder="Console messages" readonly>Console messages...</textarea>
-	</div>
-
-	<br>
-
-	<div class="box has-background-light">	
-		<div class="columns is-vcentered">
-			
-			<div class="column is-2 buttons is-bordered">
-				<div class="box">
-					<h5 class="title is-5">IN</h5>
-					<button class="button is-fullwidth" title="Microphone" id="bMic" onclick="buttonMicF()">
-						<i class="fa fa-microphone fa-2x" aria-hidden="true"></i>
-					</button>
-
-					<button class="button is-fullwidth" id="bSFi" onclick="buttonServerFileF()">
-				      	<i class='fa fa-random fa-2x'></i> 
-				    </button>
-
-					<button class="button is-fullwidth" id="bUFi" onclick="document.getElementById('audiofile').click()">
-						<i class='fa fa-upload fa-2x'></i>
-				    </button>
-
-					<p class="is-size-6" id="playinglabel">Playing: none</p>
-					
-				</div>
-			</div>
-			<div class="column is-8">
-				<div class="box">
-					<h5 class="title is-5">Plugin</h5>
-
-					<div id="pluginDiv">
-						<div class="field is-horizontal">
-							<label class="label">The plugin will be shown here when compiled</label>
-						</div>
-					</div>
-				</div>
-			</div>
-
-			<div class="column is-2 buttons is-bordered">
-				<div class="box">
-					<h5 class="title is-5 is-centered">OUT</h5>
-					<button class="button is-normal is-fullwidth" title="Playing status" onclick="playPause()" id="bOut">
-						<i class="fa fa-volume-up fa-2x" aria-hidden="true"></i>
-					</button>
-				</div>
-			</div>
-		</div>
-	</div>
-<input hidden type="file" id="audiofile" name="audiofile" accept="audio/*" onchange="buttonUserFileF(this.files)"><br>
-
-	<div class="container">
-		<div class="box">
-			<h4 class="title is-4">Plugin Exportation</h4>
-			<label class="label">Choose a target language and press "Compile & Export</label>
-
-			<div class="container">
-			<div class="select is-medium">
-				<select id="target_lang">
-					<option value="C">C</option>
-					<option value="yaaaeapa">C + yaaaeapa wrapper</option>
-					<option value="cpp">C++</option>
-					<option value="VST2">C++ + vst2 wrapper</option>
-					<option value="js">Javascript + webaudio wrapper</option>
-					<option value="d">D</option>
-					<option value="MATLAB">MATLAB</option>
-				</select>
-			</div>
-			<button class="button is-primary is-medium" onclick="compileAndView()">Compile & View</button>
-			</div>
-			<br>
-
-			<div id="exportConsoleDiv" class="container has-background-danger">
-			
-			</div>
-			<br>
-			<div class="container" id="exportViewDiv">
-
-			</div>
-
-			<div class="container" id="exportSaveDiv">
-				
-			</div>
-		</div>
-	</div>
-
-	<hr>
-
-
-</div>
-
-
-<footer class="footer">
-	<div class="content has-text-centered">
-		<p>
-			<strong>Ciaramella</strong> by <a href="https://orastron.com/">Orastron</a>. The source code is licensed
-			<a href="https://www.isc.org/licenses/">ISC</a>. The website content
-			is licensed <a href="https://www.isc.org/licenses/">ISC</a>.
-		</p>
-	</div>
-</footer>
-
-
+<site-footer></site-footer>
 </body>
 </html>

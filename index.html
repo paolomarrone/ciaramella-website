@@ -1,212 +1,77 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ciaramella</title>
-<link rel="stylesheet" href="bulma.min.css">
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-
-  // Get all "navbar-burger" elements
-  const $navbarBurgers = Array.prototype.slice.call(document.querySelectorAll('.navbar-burger'), 0);
-
-  // Check if there are any navbar burgers
-  if ($navbarBurgers.length > 0) {
-
-    // Add a click event on each of them
-    $navbarBurgers.forEach( el => {
-      let target = el.dataset.target;
-      let $target = document.getElementById(target);
-        
-      el.addEventListener('click', () => {
-        // Toggle the "is-active" class on both the "navbar-burger" and the "navbar-menu"
-        el.classList.toggle('is-active');
-        $target.classList.toggle('is-active');
-
-      });
-      
-      const $navbarItems = Array.prototype.slice.call($target.querySelectorAll('.navbar-item'), 0);
-        if ($navbarItems.length > 0) {
-			$navbarItems.forEach( it => {
-				it.addEventListener('click', () => {
-					el.classList.remove('is-active');
-					$target.classList.remove('is-active');
-					
-				});
-			});
-		}
-    });
-  }
-  
-});
-</script>
-
+<link rel="icon" href="assets/images/favicon.ico">
+<link rel="stylesheet" href="css/bulma.min.css">
+<link rel="stylesheet" href="css/main.css">
+<link rel="stylesheet" href="css/index.css">
+<script src="js/components/site-shell.js" defer></script>
 </head>
 
 <body>
+<site-nav current-page="home"></site-nav>
 
-<nav class="navbar is-dark" role="navigation" aria-label="main navigation">
-  <div class="navbar-brand">
-    <a class="navbar-item" href="index.html">
-      <img src="logo.svg" width="80" height="28">
-      <h3 class="title is-3 has-text-light">Ciaramella</h3>
-    </a>
+<main class="site-main">
+  <div class="page-container section-stack">
+    <section class="panel-card is-dark hero-panel">
+      <h1 class="title is-1 has-text-light">Ciaramella</h1>
+      <p class="subtitle hero-subtitle">A declarative language for audio DSP.</p>
 
-    <a role="button" class="navbar-burger" aria-label="menu" aria-expanded="false" data-target="navbarBasicExample">
-      <span aria-hidden="true"></span>
-      <span aria-hidden="true"></span>
-      <span aria-hidden="true"></span>
-    </a>
-  </div>
+      <ul class="feature-list">
+        <li><span class="feature-chip">Minimalistic</span></li>
+        <li><span class="feature-chip">Data flow</span></li>
+        <li><span class="feature-chip">Declarative</span></li>
+        <li><span class="feature-chip">Modular</span></li>
+      </ul>
 
-  <div id="navbarBasicExample" class="navbar-menu">
-    <div class="navbar-start">
-      
-    </div>
+      <a class="button is-primary is-large" href="webide.html">Try Ciaramella Online</a>
+    </section>
 
-    <div class="navbar-end">
-    	<a class="navbar-item" href="index.html">
-        Home
-      </a>
+    <section class="panel-card content-panel content">
+      <h2 class="title is-3">Getting Started</h2>
+      <p>Ciaramella aims to be minimal and essential, therefore its syntax is extremely simple.</p>
 
-      <a class="navbar-item" href="papers.html">
-        Papers
-      </a>
+      <h4 class="title is-4">Assignments</h4>
+      <p>Assignments are in the form:</p>
+      <div class="code-block"><pre>variable = expression</pre></div>
+      <p>or:</p>
+      <div class="code-block"><pre>var1, var2 = expression</pre></div>
+      <p>An assignment also declares the variables, so the same variable cannot be assigned twice.</p>
 
-      <a class="navbar-item" href="https://github.com/paolomarrone/Zampogna" target="_blank">
-        Source
-      </a>
-
-      <a class="navbar-item" href="webide.html">
-        Web Playground
-      </a>
-  </div>
-
-</nav>
-<div class="container">
-
-<br>
-
-
-	<div class="container has-background-dark is-fluid">
-		<br>
-		<h1 class="title is-1 has-text-light">Ciaramella</h1>
-		<h1 class="subtitle has-text-light">A declarative language for Audio DSP</h1>
-
-		<div class=' content list has-text-light'>
-			<ul>
-				<div class='list-item'>
-				    <li>
-				        Minimalistic
-				    </li>
-				</div>
-				<div class='list-item'>
-				    <li>
-				       	Data flow
-				    </li>
-				</div>
-				<div class='list-item'>
-				    <li>
-				       	Declarative
-				    </li>
-				</div>
-				<div class='list-item'>
-				    <li>
-				       	Modular
-				    </li>
-				</div>
-			</ul>
-		</div>
-
-		<hr>
-		<a href="webide.html">
-		<button class="button is-primary is-large">Try Ciaramella Online</button>
-		</a>
-		<br> <p>.</p>
-	</div>
-	
-
-	<br>
-	
-
-
-	<div class="box has-background-light">	
-		<h1 class="title is-3">Getting Started</h1>
-		<div class="has-text-dark is-size-6">
-			<p>Ciaramella aims to be minimal and essential, therefore its syntax is extremely simple.</p>
-
-			<br>
-			
-			<h4 class="title is-4">Assignments</h4>
-			
-			<p>Assignments are in the form</p>
-
-<div class="highlight has-background-dark is-fluid p-1 has-text-light"><pre>
-variable = expression</pre>
-</div>
-			<p>or</p>
-<div class="highlight has-background-dark is-fluid p-1 has-text-light"><pre>
-var1, var2 = expression</pre>
-</div>
-			
-			<p>An assignment declares the variables too and it is not possible to assign the same variable twice</p>
-
-			<br>
-			<h4 class="title is-4">Custom Block definition</h4>
-			
-			<p>The user can define reusable custom composite blocks, like defining functions in C:</p>
-
-<div class="highlight has-background-dark is-fluid p-1 has-text-light"><pre>
-y = my_mixer (x1, x2) {
+      <h4 class="title is-4">Custom Block Definition</h4>
+      <p>The user can define reusable custom composite blocks, similar to defining functions in C:</p>
+      <div class="code-block"><pre>y = my_mixer (x1, x2) {
 	tmp = x1 + x2
 	y = tmp * 0.5
-}</pre>
-			</div>
-			<p>It defines a block called "my_mixer" which takes 2 inputs and outputs 1 value. Within its body it is possible to create new temporary variables.</p>
-			
-			<p>An assignment declares the variables too and it is not possible to assign the same variable twice.</p>
-			<br>
-			<p>It is possible to define blocks with multiple outputs too:</p>
-<div class="highlight has-background-dark is-fluid p-1 has-text-light"><pre>
-y1, y2 = my_stereo_gain (x1, x2, vol1, vol2) {
+}</pre></div>
+      <p>It defines a block called <strong>my_mixer</strong> which takes 2 inputs and outputs 1 value. Within its body it is possible to create new temporary variables.</p>
+      <p>Blocks with multiple outputs are supported too:</p>
+      <div class="code-block"><pre>y1, y2 = my_stereo_gain (x1, x2, vol1, vol2) {
 	y1 = x1 * vol1
 	y2 = x2 * vol2
 }</pre></div>
 
-			<br>
-			<h4 class="title is-4">Expressions</h4>
-			<p>Expressions follow a conventional syntax. It is possible to use standard arithmetic operations and the composite blocks defined by the user. For example:</p>
-
-<div class="highlight has-background-dark is-fluid p-1 has-text-light"><pre>
-sum = a + b + (d * e) / 2
+      <h4 class="title is-4">Expressions</h4>
+      <p>Expressions follow a conventional syntax. You can use standard arithmetic operations and composite blocks defined by the user:</p>
+      <div class="code-block"><pre>sum = a + b + (d * e) / 2
 mix = 0.5 * my_mixer(a, b)
-t1, t2 = my_stereo_gain (a, b, 0.2, 0.7)</pre>
-</div>
+t1, t2 = my_stereo_gain (a, b, 0.2, 0.7)</pre></div>
+      <p>Using a composite block like <strong>my_mixer</strong> or <strong>my_stereo_gain</strong> is called <strong>block instantiation</strong> in Ciaramella terminology. Blocks with multiple outputs cannot be used directly inside other expressions.</p>
 
-		<p>Using a composite block (like my_mixer and my_stereo_gain) is called <strong>block instantiation</strong> in the Ciaramella terminology.</p>
-		<p>Intuitively blocks with multiple outputs cannot be used within other expressions.</p>
-
-		<br>
-		<h4 class="title is-4">Delay</h4>
-			<p>Ciaramella comes with the <strong>delay1</strong> (unitary delay) operator to access the previous value of a variable. It is necessary to create loops:</p>
-
-<div class="highlight has-background-dark is-fluid p-1 has-text-light"><pre>
-y = lp (x) {
+      <h4 class="title is-4">Delay</h4>
+      <p>Ciaramella comes with the <strong>delay1</strong> (unitary delay) operator to access the previous value of a variable. It is necessary to create loops:</p>
+      <div class="code-block"><pre>y = lp (x) {
 	y = delay1(y) + 0.1 * (x - delay1(y))
 	@y = 0
-}</pre>
-</div>
-		<p>The <strong>@</strong> operator sets the initial value of the variable. It is needed for the first iteration.</p>
-		<p>The above example implements a basic low pass filter</p>
+}</pre></div>
+      <p>The <strong>@</strong> operator sets the initial value of the variable. It is needed for the first iteration. The example above implements a basic low-pass filter.</p>
 
-
-		<br>
-		<h4 class="title is-4">A complete program</h4>
-			<p>The following example shows the implementation of some trivial multiple-pole low pass filters.</p>
-
-<div class="highlight has-background-dark is-fluid p-1 has-text-light"><pre>
-b = 0.1
+      <h4 class="title is-4">A Complete Program</h4>
+      <p>The following example shows the implementation of some trivial multiple-pole low-pass filters:</p>
+      <div class="code-block"><pre>b = 0.1
 y = lp (x) {
 	y_z1 = delay1(y)
 	y = y_z1 + b * (x - y_z1)
@@ -220,17 +85,11 @@ y = lp3 (x) {
 yL, yR = lp3stereo (xL, xR, volumeL, volumeR) {
 	yL = lp3 (xL) * volumeL
 	yR = lp3 (xR) * volumeR
-}
-</pre>
-</div>
+}</pre></div>
 
-
-		<br>
-		<h4 class="title is-4">if-then-else</h4>
-			<p>We lately introduced if-then-else constructs. They are defined like blocks in the usual fully declarative style</p>
-
-<div class="highlight has-background-dark is-fluid p-1 has-text-light"><pre>
-y = decimator(x) {
+      <h4 class="title is-4">If-Then-Else</h4>
+      <p>Conditional constructs are defined like blocks while preserving the same declarative style:</p>
+      <div class="code-block"><pre>y = decimator(x) {
 	y, s = if (delay1(s)) {
 		y = x
 		s = 0
@@ -241,15 +100,11 @@ y = decimator(x) {
 	t = y
 	@s = 1
 	@y = 0
-}
-</pre>
-</div>
+}</pre></div>
 
-<p>A cool feature is the possibility to use state (delay) within branches. For example:</p>
-
-<div class="highlight has-background-dark is-fluid p-1 has-text-light"><pre>
-y = saw_generator(enable, frequency) {
-	y = if (enable > 0.5) {
+      <p>A useful feature is that state can be used inside branches:</p>
+      <div class="code-block"><pre>y = saw_generator(enable, frequency) {
+	y = if (enable &gt; 0.5) {
 		phaseInc = mapFreq(frequency) / fs
 		phase = frac(delay1(phase) + phaseInc)
 		@phase = 0
@@ -263,56 +118,33 @@ y = mapFreq (fr) {
 	y = fr * fr * fr * 10000 + 20
 }
 
-# Only for fs >= 10020
+# Only for fs &gt;= 10020
 y = frac (x) {
-	y = if (x >= 1) {
+	y = if (x &gt;= 1) {
 		y = x - 1
 	} else {
 		y = x
 	}
-}
-</pre>
-</div>
-phase is only visible within the first branch and gets updated only when then codition is met.
+}</pre></div>
+      <p>Here, <strong>phase</strong> is only visible inside the first branch and gets updated only when the condition is met.</p>
 
+      <hr class="section-divider">
 
-	<hr>
-	<h2 class="title is-2">Compilation</h2>	
+      <h2 class="title is-2">Compilation</h2>
+      <p>The compiler developed for Ciaramella is called <strong>Zampogna</strong> and it is available on <a href="https://github.com/paolomarrone/Zampogna" target="_blank" rel="noreferrer">GitHub</a>. It ships with a command-line interface for Node.js. Alternatively, you can use the <a href="webide.html">web playground</a> to write code, compile it, and immediately hear the result.</p>
+      <p>To compile the previous example from a file called <code>lp.crm</code>:</p>
+      <div class="code-block"><pre>zampogna.js -i lp3stereo -c volumeL,volumeR -t cpp lp.crm</pre></div>
+      <p>The <code>-i lp3stereo</code> flag selects the initial block (similar to <code>main</code> in C). The <code>-c volumeL,volumeR</code> flag tells the compiler that <code>volumeL</code> and <code>volumeR</code> are user controls and not audio signals.</p>
 
-	<p>The compiler we developed for Ciaramella is called <strong>Zampogna</strong> and it is downloadble <a href="https://github.com/paolomarrone/Zampogna">here</a>. It comes with the zampogna-cli.js command line interface which is easily usable via nodejs. Alternatively you can try the web version of zampogna <a href="https://ciaramella.dev/webide.html">online</a> which comes with a text editor and an execution section to directly listen to the effect of you code!</p>
+      <hr class="section-divider">
 
-	<p>Zampogna-cli is easily usable. For example, to compile the previous example, assuming you saved it in lp.crm, you can use:</p>
+      <h2 class="title is-2">Further Info</h2>
+      <p>For the history and motivation behind the project, you can read <a href="https://www.orastron.com/blog/ciaramella-smc" target="_blank" rel="noreferrer">this blog post</a>.</p>
+      <p>For questions, contact <a href="mailto:info@orastron.com">info@orastron.com</a>.</p>
+    </section>
+  </div>
+</main>
 
-<div class="highlight has-background-dark is-fluid p-1 has-text-light"><pre>
-zampogna.js -i lp3stereo -c volumeL,volumeR -t cpp lp.crm
-</pre>
-</div>
-
-<p>the "-i lp3stereo" selects the lp3stereo block as the initial one (something like the main in C). The "-c volumeR,volumeR" tells the compiler that volumeL and volumeR are user control inputs and not audio signals.</p>
-
-	<hr>
-	<h2 class="title is-2">Further info</h2>	
-
-	<p>For the history and motivation behind the project, you can check <a href="https://www.orastron.com/blog/ciaramella-smc" target="_blank">this blog post</a>.</p>
-	<p>In any case, feel free to contact us at <a href="mailto:info@orastron.com">info@orastron.com</a>.</p>
-
-
-	</div>
-	<hr>
-	
-</div>
-
-
-<footer class="footer">
-	<div class="content has-text-centered">
-		<p>
-			<strong>Ciaramella</strong> by <a href="https://orastron.com/">Orastron</a>. The source code is licensed
-			<a href="https://www.isc.org/licenses/">ISC</a>. The website content
-			is licensed <a href="https://www.isc.org/licenses/">ISC</a>.
-		</p>
-	</div>
-</footer>
-
-
+<site-footer></site-footer>
 </body>
 </html>

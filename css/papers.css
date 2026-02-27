@@ -1,0 +1,33 @@
+.papers-panel {
+  padding: 2rem;
+}
+
+.papers-list {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.paper-card {
+  padding: 1.5rem;
+  border-radius: 1rem;
+  background: linear-gradient(180deg, #f9fbff 0%, #f1f5fb 100%);
+  border: 1px solid var(--border);
+}
+
+.paper-card p {
+  margin-bottom: 0.75rem;
+}
+
+.paper-card .paper-title {
+  margin-bottom: 0.4rem;
+}
+
+.paper-link {
+  font-weight: 700;
+}
+
+@media screen and (max-width: 768px) {
+  .papers-panel {
+    padding: 1.4rem;
+  }
+}
