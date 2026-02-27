@@ -1,7 +1,8 @@
-var node;
-var ctx;
-var inputNode;
-var streamMic;
+var node = null;
+var ctx = null;
+var inputNode = null;
+var streamMic = null;
+var currentProcessorUrl = null;
 var serverFileUrls = [
   "assets/audio/disco-beat.mp3",
   "assets/audio/drum.mp3",
@@ -18,6 +19,80 @@ var userFileName = "";
 var sourceSelected = null;
 var inputInitialValues = {};
 var codeExamples = {};
+var elements = {};
+var exampleSpecs = [
+  ["amp", "amp", "level", "assets/examples/amp.crm"],
+  ["lp3", "lp3", "fr", "assets/examples/lp3.crm"],
+  ["eqr", "EQregalia", "low, high, peak", "assets/examples/EQregalia.crm"],
+  ["wdf", "lp_filter", "cutoff", "assets/examples/lp_wdf.crm"],
+  ["saw_generator", "saw_generator", "enable, frequency", "assets/examples/saw_generator.crm"],
+  ["decimator", "decimator", "bypass", "assets/examples/decimator.crm"]
+];
+
+function cacheElements() {
+  elements = {
+    tabs: document.getElementById("tabs"),
+    newTabButton: document.getElementById("newTabB"),
+    textEditors: document.getElementById("textEditorsDiv"),
+    compilePlayButton: document.getElementById("compilePlayButton"),
+    compileViewButton: document.getElementById("compileViewButton"),
+    console: document.getElementById("consoleTA"),
+    plugin: document.getElementById("pluginDiv"),
+    examples: document.getElementById("examples"),
+    examplesDropdown: document.getElementById("examplesDropdown"),
+    examplesToggle: document.querySelector("[data-toggle-examples]"),
+    audioFile: document.getElementById("audiofile"),
+    micButton: document.getElementById("bMic"),
+    serverButton: document.getElementById("bSFi"),
+    uploadButton: document.getElementById("bUFi"),
+    outputButton: document.getElementById("bOut"),
+    playingLabel: document.getElementById("playinglabel"),
+    targetLang: document.getElementById("target_lang"),
+    exportConsole: document.getElementById("exportConsoleDiv"),
+    exportView: document.getElementById("exportViewDiv"),
+    exportSave: document.getElementById("exportSaveDiv")
+  };
+}
+
+function setConsoleMessage(message) {
+  elements.console.value = message;
+}
+
+function setExportError(message) {
+  if (!message) {
+    elements.exportConsole.textContent = "";
+    elements.exportConsole.hidden = true;
+    return;
+  }
+
+  elements.exportConsole.textContent = message;
+  elements.exportConsole.hidden = false;
+}
+
+function setTransportMode(mode, label) {
+  elements.micButton.classList.toggle("is-success", mode === "MIC");
+  elements.serverButton.classList.toggle("is-success", mode === "SFI");
+  elements.uploadButton.classList.toggle("is-success", mode === "UFI");
+  elements.playingLabel.textContent = label || "Playing: none";
+  sourceSelected = mode;
+}
+
+function stopCurrentInput() {
+  if (!inputNode) {
+    return;
+  }
+
+  if (typeof inputNode.stop === "function") {
+    try {
+      inputNode.stop(0);
+    } catch (e) {
+      // Ignore invalid state when stopping an already-ended buffer source.
+    }
+  }
+
+  inputNode.disconnect();
+  inputNode = null;
+}
 
 function newTextEditor() {
   var codeEditor = document.createElement("textarea");
@@ -83,7 +158,7 @@ function newTextEditor() {
   editorShell.appendChild(textEditorDiv);
   editorShell.appendChild(compileInputDiv);
 
-  document.getElementById("textEditorsDiv").appendChild(editorShell);
+  elements.textEditors.appendChild(editorShell);
 
   return editorShell;
 }
@@ -105,18 +180,31 @@ function closeTab(tab) {
 
 function newTab(title) {
   var safeTitle = title || "Untitled.crm";
-  var newTabB = document.getElementById("newTabB");
   var li = document.createElement("li");
+  var anchor = document.createElement("a");
+  var titleSpan = document.createElement("span");
+  var closeButton = document.createElement("button");
 
-  li.onclick = function () {
+  titleSpan.textContent = safeTitle;
+  closeButton.type = "button";
+  closeButton.className = "tab-close has-text-danger";
+  closeButton.textContent = "✖";
+  closeButton.setAttribute("aria-label", "Close tab");
+  closeButton.addEventListener("click", function (event) {
+    event.stopPropagation();
+    closeTab(closeButton);
+  });
+
+  anchor.appendChild(titleSpan);
+  anchor.appendChild(document.createTextNode(" "));
+  anchor.appendChild(closeButton);
+  li.appendChild(anchor);
+
+  li.addEventListener("click", function () {
     selectTab(li);
-  };
-  li.innerHTML =
-    "<a><span>" +
-    safeTitle +
-    "</span>&nbsp; <button type=\"button\" class=\"tab-close has-text-danger\" onclick=\"closeTab(this)\">✖</button></a>";
+  });
 
-  newTabB.parentNode.insertBefore(li, newTabB);
+  elements.newTabButton.parentNode.insertBefore(li, elements.newTabButton);
 
   var ted = newTextEditor();
   li.ted = ted;
@@ -159,11 +247,10 @@ function loadExample(id) {
 }
 
 function getActiveTED() {
-  var tabs = document.getElementById("tabs");
   var i;
 
-  for (i = 0; i < tabs.children[0].children.length; i += 1) {
-    var li = tabs.children[0].children[i];
+  for (i = 0; i < elements.tabs.children[0].children.length; i += 1) {
+    var li = elements.tabs.children[0].children[i];
     if (li.classList.contains("is-active")) {
       return li.ted;
     }
@@ -218,6 +305,73 @@ function getInput(ted) {
   };
 }
 
+function buildPluginControls(controlInputs) {
+  var fragment = document.createDocumentFragment();
+  var hasControls = false;
+  var i;
+
+  elements.plugin.innerHTML = "";
+
+  for (i = 0; i < controlInputs.length; i += 1) {
+    var controlId = controlInputs[i];
+
+    if (!controlId) {
+      continue;
+    }
+
+    hasControls = true;
+
+    var field = document.createElement("div");
+    var fieldLabel = document.createElement("div");
+    var label = document.createElement("label");
+    var fieldBody = document.createElement("div");
+    var fieldWrap = document.createElement("div");
+    var control = document.createElement("p");
+    var slider = document.createElement("input");
+    var initialLevel = inputInitialValues[controlId];
+
+    if (initialLevel === undefined) {
+      initialLevel = 0;
+    }
+
+    field.className = "field is-horizontal";
+    fieldLabel.className = "field-label is-normal";
+    label.className = "label";
+    label.textContent = controlId;
+    fieldBody.className = "field-body";
+    fieldWrap.className = "field";
+    control.className = "control";
+    slider.className = "input is-primary";
+    slider.type = "range";
+    slider.id = controlId;
+    slider.name = controlId;
+    slider.min = "0";
+    slider.max = "1";
+    slider.step = "any";
+    slider.value = String(initialLevel);
+    slider.addEventListener("input", function (event) {
+      handleInput(event.target);
+    });
+
+    fieldLabel.appendChild(label);
+    control.appendChild(slider);
+    fieldWrap.appendChild(control);
+    fieldBody.appendChild(fieldWrap);
+    field.appendChild(fieldLabel);
+    field.appendChild(fieldBody);
+    fragment.appendChild(field);
+  }
+
+  if (!hasControls) {
+    var emptyState = document.createElement("div");
+    emptyState.className = "field is-horizontal";
+    emptyState.innerHTML = '<label class="label">No control inputs declared for this block.</label>';
+    fragment.appendChild(emptyState);
+  }
+
+  elements.plugin.appendChild(fragment);
+}
+
 function compile(ted, targetLang) {
   var input = getInput(ted);
   var debug = false;
@@ -238,104 +392,85 @@ function handleInput(e) {
 }
 
 async function play(activeTed, processorStr) {
-  var pluginDiv = document.getElementById("pluginDiv");
   var controlInputsS = activeTed.children[1].children[1].value;
   var controlInputs = controlInputsS.split(",").map(function (value) {
     return value.trim();
   });
-  var c;
+  var previousSource = sourceSelected;
+  var scriptUrl;
 
-  pluginDiv.innerHTML = "";
+  buildPluginControls(controlInputs);
 
-  for (c = 0; c < controlInputs.length; c += 1) {
-    if (!controlInputs[c]) {
-      continue;
-    }
-
-    var initialLevel = inputInitialValues[controlInputs[c]];
-    if (initialLevel === undefined) {
-      initialLevel = 0;
-    }
-
-    pluginDiv.innerHTML +=
-      '<div class="field is-horizontal">' +
-      '<div class="field-label is-normal"><label class="label">' +
-      controlInputs[c] +
-      "</label></div>" +
-      '<div class="field-body"><div class="field"><p class="control">' +
-      '<input class="input is-primary" type="range" id="' +
-      controlInputs[c] +
-      '" name="' +
-      controlInputs[c] +
-      '" min="0" max="1" value="' +
-      initialLevel +
-      '" step="any" oninput="handleInput(this)">' +
-      "</p></div></div></div>";
-  }
-
-  var scriptUrl = URL.createObjectURL(new Blob([processorStr], { type: "text/javascript" }));
+  scriptUrl = URL.createObjectURL(new Blob([processorStr], { type: "text/javascript" }));
 
   if (ctx) {
+    stopCurrentInput();
     await ctx.close();
   }
 
+  if (currentProcessorUrl) {
+    URL.revokeObjectURL(currentProcessorUrl);
+  }
+
+  currentProcessorUrl = scriptUrl;
   ctx = new (window.AudioContext || window.webkitAudioContext)();
   await ctx.audioWorklet.addModule(scriptUrl);
 
   node = new AudioWorkletNode(ctx, "PluginProcessor", { outputChannelCount: [1] });
   node.connect(ctx.destination);
 
-  if (!inputNode) {
+  if (!previousSource) {
     await buttonServerFileF();
     return;
   }
 
-  if (sourceSelected === "MIC") {
-    buttonMicF();
-  } else if (sourceSelected === "SFI") {
-    buttonServerFileF(1);
-  } else if (sourceSelected === "UFI") {
+  if (previousSource === "MIC") {
+    await buttonMicF();
+  } else if (previousSource === "SFI") {
+    await buttonServerFileF(1);
+  } else if (previousSource === "UFI") {
     buttonUserFileF([], 1);
-  } else if (inputNode) {
-    inputNode.connect(node);
+  } else {
+    await buttonServerFileF();
   }
 }
 
 function compileAndPlay() {
   var activeTed = getActiveTED();
+  var output;
   var processorStr;
 
   try {
-    processorStr = compile(activeTed, "js")[1].str;
-    document.getElementById("consoleTA").value = "Compiled successfully";
+    output = compile(activeTed, "js");
+    if (!output[1] || !output[1].str) {
+      throw new Error("Unexpected compiler output for the Web Audio target.");
+    }
+    processorStr = output[1].str;
+    setConsoleMessage("Compiled successfully.");
   } catch (e) {
-    document.getElementById("consoleTA").value = String(e);
+    setConsoleMessage(String(e));
     return;
   }
 
   play(activeTed, processorStr).catch(function (e) {
-    document.getElementById("consoleTA").value = String(e);
+    setConsoleMessage(String(e));
   });
 }
 
 function compileAndView() {
-  var exportConsoleDiv = document.getElementById("exportConsoleDiv");
-  var exportViewDiv = document.getElementById("exportViewDiv");
-  var exportSaveDiv = document.getElementById("exportSaveDiv");
   var output;
   var o;
   var saveButton;
 
-  exportConsoleDiv.textContent = "";
-  exportConsoleDiv.hidden = true;
-  exportViewDiv.innerHTML = "";
-  exportSaveDiv.innerHTML = "";
+  setExportError("");
+  elements.exportView.innerHTML = "";
+  elements.exportSave.innerHTML = "";
 
   try {
-    output = compile(getActiveTED(), document.getElementById("target_lang").value);
+    output = compile(getActiveTED(), elements.targetLang.value);
 
     for (o = 0; o < output.length; o += 1) {
-      exportViewDiv.innerHTML +=
+      elements.exportView.innerHTML +=
         "<div>" +
         '<label class="label">' +
         output[o].name +
@@ -346,8 +481,7 @@ function compileAndView() {
         "</div><br>";
     }
   } catch (e) {
-    exportConsoleDiv.textContent = String(e);
-    exportConsoleDiv.hidden = false;
+    setExportError(String(e));
     return;
   }
 
@@ -360,7 +494,7 @@ function compileAndView() {
     }
   };
 
-  exportSaveDiv.appendChild(saveButton);
+  elements.exportSave.appendChild(saveButton);
 }
 
 function downloadtext(filename, text) {
@@ -375,6 +509,7 @@ function downloadtext(filename, text) {
 
 async function buttonMicF() {
   if (!ctx) {
+    setConsoleMessage("Compile a plugin first.");
     return;
   }
 
@@ -389,22 +524,16 @@ async function buttonMicF() {
     });
   }
 
-  if (inputNode) {
-    inputNode.disconnect();
-  }
-
+  stopCurrentInput();
   inputNode = ctx.createMediaStreamSource(streamMic);
   inputNode.connect(node);
 
-  document.getElementById("bMic").classList.add("is-success");
-  document.getElementById("bSFi").classList.remove("is-success");
-  document.getElementById("bUFi").classList.remove("is-success");
-  document.getElementById("playinglabel").textContent = "Playing: Microphone";
-  sourceSelected = "MIC";
+  setTransportMode("MIC", "Playing: Microphone");
 }
 
 function buttonServerFileF(again) {
   if (!ctx) {
+    setConsoleMessage("Compile a plugin first.");
     return Promise.resolve();
   }
 
@@ -416,12 +545,10 @@ function buttonServerFileF(again) {
     return downloadSong(serverFileSelected).then(function () {
       startSong(serverFileSelected);
       playPause(true);
-      document.getElementById("bMic").classList.remove("is-success");
-      document.getElementById("bSFi").classList.add("is-success");
-      document.getElementById("bUFi").classList.remove("is-success");
-      document.getElementById("playinglabel").textContent =
-        "Playing: " + serverFileUrls[serverFileSelected].split("/").pop();
-      sourceSelected = "SFI";
+      setTransportMode(
+        "SFI",
+        "Playing: " + serverFileUrls[serverFileSelected].split("/").pop()
+      );
     });
   }
 
@@ -432,6 +559,9 @@ function buttonServerFileF(again) {
 
     return fetch(serverFileUrls[id])
       .then(function (response) {
+        if (!response.ok) {
+          throw new Error("Could not load example audio file.");
+        }
         return response.blob();
       })
       .then(function (blob) {
@@ -447,10 +577,7 @@ function buttonServerFileF(again) {
   }
 
   function startSong(id) {
-    if (inputNode) {
-      inputNode.disconnect();
-    }
-
+    stopCurrentInput();
     inputNode = ctx.createBufferSource();
     inputNode.connect(node);
     inputNode.buffer = serverFileBufferCache[id];
@@ -461,10 +588,15 @@ function buttonServerFileF(again) {
 
 function buttonUserFileF(files, again) {
   if (!ctx) {
+    setConsoleMessage("Compile a plugin first.");
     return;
   }
 
   if (again) {
+    if (!userFileBufferCache) {
+      setConsoleMessage("Load an audio file first.");
+      return;
+    }
     reconnectUserFile();
     return;
   }
@@ -476,21 +608,14 @@ function buttonUserFileF(files, again) {
   uploadFile(files[0]);
 
   function reconnectUserFile() {
-    if (inputNode) {
-      inputNode.disconnect();
-    }
-
+    stopCurrentInput();
     inputNode = ctx.createBufferSource();
     inputNode.buffer = userFileBufferCache;
     inputNode.loop = true;
     inputNode.connect(node);
     inputNode.start(0);
 
-    document.getElementById("bMic").classList.remove("is-success");
-    document.getElementById("bSFi").classList.remove("is-success");
-    document.getElementById("bUFi").classList.add("is-success");
-    document.getElementById("playinglabel").textContent = "Playing: " + userFileName;
-    sourceSelected = "UFI";
+    setTransportMode("UFI", "Playing: " + userFileName);
   }
 
   function uploadFile(file) {
@@ -498,11 +623,16 @@ function buttonUserFileF(files, again) {
 
     fileReader.readAsArrayBuffer(file);
     fileReader.onload = function (e) {
-      ctx.decodeAudioData(e.target.result).then(function (buffer) {
-        userFileBufferCache = buffer;
-        userFileName = file.name;
-        reconnectUserFile();
-      });
+      ctx
+        .decodeAudioData(e.target.result)
+        .then(function (buffer) {
+          userFileBufferCache = buffer;
+          userFileName = file.name;
+          reconnectUserFile();
+        })
+        .catch(function () {
+          setConsoleMessage("The selected file could not be decoded.");
+        });
     };
   }
 }
@@ -514,28 +644,28 @@ function playPause(value) {
 
   if ((value === undefined && ctx.state === "running") || value === false) {
     ctx.suspend();
-    document.getElementById("bOut").classList.add("is-warning");
-    document.getElementById("bOut").classList.remove("is-success");
+    elements.outputButton.classList.add("is-warning");
+    elements.outputButton.classList.remove("is-success");
   } else {
     ctx.resume();
-    document.getElementById("bOut").classList.remove("is-warning");
-    document.getElementById("bOut").classList.add("is-success");
+    elements.outputButton.classList.remove("is-warning");
+    elements.outputButton.classList.add("is-success");
   }
 }
 
 function bindExampleMenu() {
-  var examplesItems = document.getElementById("examples").children;
-  var dropdown = document.getElementById("examplesDropdown");
+  var examplesItems = elements.examples.children;
+  var dropdown = elements.examplesDropdown;
   var i;
 
   for (i = 0; i < examplesItems.length; i += 1) {
-    examplesItems[i].onclick = function (e) {
+    examplesItems[i].addEventListener("click", function (e) {
       loadExample(e.target.id);
       dropdown.classList.remove("is-active");
-    };
+    });
   }
 
-  document.querySelector("[data-toggle-examples]").addEventListener("click", function (event) {
+  elements.examplesToggle.addEventListener("click", function (event) {
     event.stopPropagation();
     dropdown.classList.toggle("is-active");
   });
@@ -548,19 +678,13 @@ function bindExampleMenu() {
 }
 
 function loadExamples() {
-  var examples = [
-    ["amp", "amp", "level", "assets/examples/amp.crm"],
-    ["lp3", "lp3", "fr", "assets/examples/lp3.crm"],
-    ["eqr", "EQregalia", "low, high, peak", "assets/examples/EQregalia.crm"],
-    ["wdf", "lp_filter", "cutoff", "assets/examples/lp_wdf.crm"],
-    ["saw_generator", "saw_generator", "enable, frequency", "assets/examples/saw_generator.crm"],
-    ["decimator", "decimator", "bypass", "assets/examples/decimator.crm"]
-  ];
-
   return Promise.all(
-    examples.map(function (example) {
+    exampleSpecs.map(function (example) {
       return fetch(example[3])
         .then(function (response) {
+          if (!response.ok) {
+            throw new Error("Could not load example source files.");
+          }
           return response.text();
         })
         .then(function (code) {
@@ -575,7 +699,36 @@ function loadExamples() {
 }
 
 window.addEventListener("load", function () {
+  cacheElements();
   newTab();
   bindExampleMenu();
-  loadExamples();
+  elements.newTabButton.addEventListener("click", function () {
+    newTab();
+  });
+  elements.compilePlayButton.addEventListener("click", compileAndPlay);
+  elements.compileViewButton.addEventListener("click", compileAndView);
+  elements.micButton.addEventListener("click", function () {
+    buttonMicF().catch(function (e) {
+      setConsoleMessage(String(e));
+    });
+  });
+  elements.serverButton.addEventListener("click", function () {
+    buttonServerFileF().catch(function (e) {
+      setConsoleMessage(String(e));
+    });
+  });
+  elements.uploadButton.addEventListener("click", function () {
+    elements.audioFile.click();
+  });
+  elements.outputButton.addEventListener("click", function () {
+    playPause();
+  });
+  elements.audioFile.addEventListener("change", function () {
+    buttonUserFileF(elements.audioFile.files);
+    elements.audioFile.value = "";
+  });
+
+  loadExamples().catch(function (e) {
+    setConsoleMessage(String(e));
+  });
 });

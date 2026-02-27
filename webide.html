@@ -52,14 +52,14 @@
 
       <div id="tabs" class="tabs is-boxed is-centered is-normal">
         <ul>
-          <li onclick="newTab()" id="newTabB"><a><span>✚</span></a></li>
+          <li id="newTabB"><a><span>✚</span></a></li>
         </ul>
       </div>
 
       <div id="textEditorsDiv"></div>
 
       <div class="mt-4">
-        <button class="button is-primary is-medium is-fullwidth" onclick="compileAndPlay()">Compile &amp; Play</button>
+        <button class="button is-primary is-medium is-fullwidth" id="compilePlayButton">Compile &amp; Play</button>
       </div>
 
       <div class="mt-4">
@@ -71,13 +71,13 @@
       <div class="transport-grid">
         <div class="box transport-box transport-buttons">
           <h5 class="title is-5">Input</h5>
-          <button class="button is-fullwidth" title="Microphone" id="bMic" onclick="buttonMicF()">
+          <button class="button is-fullwidth" type="button" title="Microphone" id="bMic">
             <i class="fa fa-microphone fa-2x" aria-hidden="true"></i>
           </button>
-          <button class="button is-fullwidth" id="bSFi" onclick="buttonServerFileF()">
+          <button class="button is-fullwidth" type="button" id="bSFi">
             <i class="fa fa-random fa-2x" aria-hidden="true"></i>
           </button>
-          <button class="button is-fullwidth" id="bUFi" onclick="document.getElementById('audiofile').click()">
+          <button class="button is-fullwidth" type="button" id="bUFi">
             <i class="fa fa-upload fa-2x" aria-hidden="true"></i>
           </button>
           <p class="is-size-6 transport-status" id="playinglabel">Playing: none</p>
@@ -94,7 +94,7 @@
 
         <div class="box transport-box">
           <h5 class="title is-5">Output</h5>
-          <button class="button is-normal is-fullwidth" title="Playing status" onclick="playPause()" id="bOut">
+          <button class="button is-normal is-fullwidth" type="button" title="Playing status" id="bOut">
             <i class="fa fa-volume-up fa-2x" aria-hidden="true"></i>
           </button>
         </div>
@@ -119,7 +119,7 @@
             <option value="MATLAB">MATLAB</option>
           </select>
         </div>
-        <button class="button is-primary is-medium" onclick="compileAndView()">Compile &amp; View</button>
+        <button class="button is-primary is-medium" type="button" id="compileViewButton">Compile &amp; View</button>
       </div>
 
       <div id="exportConsoleDiv" class="notification is-danger is-light mt-4" hidden></div>
