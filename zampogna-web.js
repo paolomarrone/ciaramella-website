@@ -1,4 +1,150 @@
 (function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f()}else if(typeof define==="function"&&define.amd){define([],f)}else{var g;if(typeof window!=="undefined"){g=window}else if(typeof global!=="undefined"){g=global}else if(typeof self!=="undefined"){g=self}else{g=this}g.zampogna = f()}})(function(){var define,module,exports;return (function(){function r(e,n,t){function o(i,f){if(!n[i]){if(!e[i]){var c="function"==typeof require&&require;if(!f&&c)return c(i,!0);if(u)return u(i,!0);var a=new Error("Cannot find module '"+i+"'");throw a.code="MODULE_NOT_FOUND",a}var p=n[i]={exports:{}};e[i][0].call(p.exports,function(r){var n=e[i][1][r];return o(n||r)},p,p.exports,r,e,n,t)}return n[i].exports}for(var u="function"==typeof require&&require,i=0;i<t.length;i++)o(t[i]);return o}return r})()({1:[function(require,module,exports){
+// doT.js
+// 2011-2014, Laura Doktorova, https://github.com/olado/doT
+// Licensed under the MIT license.
+
+(function () {
+	"use strict";
+
+	var doT = {
+		name: "doT",
+		version: "1.1.1",
+		templateSettings: {
+			evaluate:    /\{\{([\s\S]+?(\}?)+)\}\}/g,
+			interpolate: /\{\{=([\s\S]+?)\}\}/g,
+			encode:      /\{\{!([\s\S]+?)\}\}/g,
+			use:         /\{\{#([\s\S]+?)\}\}/g,
+			useParams:   /(^|[^\w$])def(?:\.|\[[\'\"])([\w$\.]+)(?:[\'\"]\])?\s*\:\s*([\w$\.]+|\"[^\"]+\"|\'[^\']+\'|\{[^\}]+\})/g,
+			define:      /\{\{##\s*([\w\.$]+)\s*(\:|=)([\s\S]+?)#\}\}/g,
+			defineParams:/^\s*([\w$]+):([\s\S]+)/,
+			conditional: /\{\{\?(\?)?\s*([\s\S]*?)\s*\}\}/g,
+			iterate:     /\{\{~\s*(?:\}\}|([\s\S]+?)\s*\:\s*([\w$]+)\s*(?:\:\s*([\w$]+))?\s*\}\})/g,
+			varname:	"it",
+			strip:		true,
+			append:		true,
+			selfcontained: false,
+			doNotSkipEncoded: false
+		},
+		template: undefined, //fn, compile template
+		compile:  undefined, //fn, for express
+		log: true
+	}, _globals;
+
+	doT.encodeHTMLSource = function(doNotSkipEncoded) {
+		var encodeHTMLRules = { "&": "&#38;", "<": "&#60;", ">": "&#62;", '"': "&#34;", "'": "&#39;", "/": "&#47;" },
+			matchHTML = doNotSkipEncoded ? /[&<>"'\/]/g : /&(?!#?\w+;)|<|>|"|'|\//g;
+		return function(code) {
+			return code ? code.toString().replace(matchHTML, function(m) {return encodeHTMLRules[m] || m;}) : "";
+		};
+	};
+
+	_globals = (function(){ return this || (0,eval)("this"); }());
+
+	/* istanbul ignore else */
+	if (typeof module !== "undefined" && module.exports) {
+		module.exports = doT;
+	} else if (typeof define === "function" && define.amd) {
+		define(function(){return doT;});
+	} else {
+		_globals.doT = doT;
+	}
+
+	var startend = {
+		append: { start: "'+(",      end: ")+'",      startencode: "'+encodeHTML(" },
+		split:  { start: "';out+=(", end: ");out+='", startencode: "';out+=encodeHTML(" }
+	}, skip = /$^/;
+
+	function resolveDefs(c, block, def) {
+		return ((typeof block === "string") ? block : block.toString())
+		.replace(c.define || skip, function(m, code, assign, value) {
+			if (code.indexOf("def.") === 0) {
+				code = code.substring(4);
+			}
+			if (!(code in def)) {
+				if (assign === ":") {
+					if (c.defineParams) value.replace(c.defineParams, function(m, param, v) {
+						def[code] = {arg: param, text: v};
+					});
+					if (!(code in def)) def[code]= value;
+				} else {
+					new Function("def", "def['"+code+"']=" + value)(def);
+				}
+			}
+			return "";
+		})
+		.replace(c.use || skip, function(m, code) {
+			if (c.useParams) code = code.replace(c.useParams, function(m, s, d, param) {
+				if (def[d] && def[d].arg && param) {
+					var rw = (d+":"+param).replace(/'|\\/g, "_");
+					def.__exp = def.__exp || {};
+					def.__exp[rw] = def[d].text.replace(new RegExp("(^|[^\\w$])" + def[d].arg + "([^\\w$])", "g"), "$1" + param + "$2");
+					return s + "def.__exp['"+rw+"']";
+				}
+			});
+			var v = new Function("def", "return " + code)(def);
+			return v ? resolveDefs(c, v, def) : v;
+		});
+	}
+
+	function unescape(code) {
+		return code.replace(/\\('|\\)/g, "$1").replace(/[\r\t\n]/g, " ");
+	}
+
+	doT.template = function(tmpl, c, def) {
+		c = c || doT.templateSettings;
+		var cse = c.append ? startend.append : startend.split, needhtmlencode, sid = 0, indv,
+			str  = (c.use || c.define) ? resolveDefs(c, tmpl, def || {}) : tmpl;
+
+		str = ("var out='" + (c.strip ? str.replace(/(^|\r|\n)\t* +| +\t*(\r|\n|$)/g," ")
+					.replace(/\r|\n|\t|\/\*[\s\S]*?\*\//g,""): str)
+			.replace(/'|\\/g, "\\$&")
+			.replace(c.interpolate || skip, function(m, code) {
+				return cse.start + unescape(code) + cse.end;
+			})
+			.replace(c.encode || skip, function(m, code) {
+				needhtmlencode = true;
+				return cse.startencode + unescape(code) + cse.end;
+			})
+			.replace(c.conditional || skip, function(m, elsecase, code) {
+				return elsecase ?
+					(code ? "';}else if(" + unescape(code) + "){out+='" : "';}else{out+='") :
+					(code ? "';if(" + unescape(code) + "){out+='" : "';}out+='");
+			})
+			.replace(c.iterate || skip, function(m, iterate, vname, iname) {
+				if (!iterate) return "';} } out+='";
+				sid+=1; indv=iname || "i"+sid; iterate=unescape(iterate);
+				return "';var arr"+sid+"="+iterate+";if(arr"+sid+"){var "+vname+","+indv+"=-1,l"+sid+"=arr"+sid+".length-1;while("+indv+"<l"+sid+"){"
+					+vname+"=arr"+sid+"["+indv+"+=1];out+='";
+			})
+			.replace(c.evaluate || skip, function(m, code) {
+				return "';" + unescape(code) + "out+='";
+			})
+			+ "';return out;")
+			.replace(/\n/g, "\\n").replace(/\t/g, '\\t').replace(/\r/g, "\\r")
+			.replace(/(\s|;|\}|^|\{)out\+='';/g, '$1').replace(/\+''/g, "");
+			//.replace(/(\s|;|\}|^|\{)out\+=''\+/g,'$1out+=');
+
+		if (needhtmlencode) {
+			if (!c.selfcontained && _globals && !_globals._encodeHTML) _globals._encodeHTML = doT.encodeHTMLSource(c.doNotSkipEncoded);
+			str = "var encodeHTML = typeof _encodeHTML !== 'undefined' ? _encodeHTML : ("
+				+ doT.encodeHTMLSource.toString() + "(" + (c.doNotSkipEncoded || '') + "));"
+				+ str;
+		}
+		try {
+			return new Function(c.varname, str);
+		} catch (e) {
+			/* istanbul ignore else */
+			if (typeof console !== "undefined") console.log("Could not create a template function: " + str);
+			throw e;
+		}
+	};
+
+	doT.compile = function(tmpl, def) {
+		return doT.template(tmpl, null, def);
+	};
+}());
+
+},{}],2:[function(require,module,exports){
 /*
 	Copyright (C) 2021, 2022 Orastron Srl
 
@@ -14,8 +160,9 @@
 	Author: Paolo Marrone
 */
 (function() {
+	'use strict'
 
-	var ScopeTable = {
+	const ScopeTable = {
 		elements: {},
 		father: null,
 		id: "",
@@ -30,18 +177,19 @@
 		},
 
 		find: function (id) {
-			if (e = this.findLocal(id))
-				return e
+			const found = this.findLocal(id)
+			if (found)
+				return found
 			if (this.father)
-				return this.father.find(id);
+				return this.father.find(id)
 			return null
 		},
 
 		add: function (id, item) {
-			if (id == '_')
+			if (id === '_')
 				return
 			if (this.findLocal(id))
-				err("ID assigned twice: " + id);
+				err("ID assigned twice: " + id)
 			this.elements[id] = item
 		},
 
@@ -58,8 +206,8 @@
 		}
 	}
 
-	var scopes = []
-	var scope_reserved = Object.create(ScopeTable)
+	let scopes = []
+	const scope_reserved = Object.create(ScopeTable)
 	scope_reserved.init("_reserved_")
 	scope_reserved.add("delay1", { 
 		type: 'func', 
@@ -75,37 +223,37 @@
 		scope_program.father = scope_reserved
 		scopes.push(scope_program)
 
-		AST_root.stmts.filter(stmt => stmt.name == 'BLOCK_DEF').forEach(
+		AST_root.stmts.filter(stmt => stmt.name === 'BLOCK_DEF').forEach(
 			block => analyze_block_signature(scope_program, block))
 
-		AST_root.stmts.filter(stmt => stmt.name == 'ASSIGNMENT').forEach(ass => ass.outputs.forEach(function (output) {
+		AST_root.stmts.filter(stmt => stmt.name === 'ASSIGNMENT').forEach(ass => ass.outputs.forEach(function (output) {
 				if (output.init)
 					err("Cannot use '@' in consts definitions")
 				analyze_left_assignment(scope_program, output)
 				scope_program.elements[output.val].kind = 'const'
 		}))
 
-		AST_root.stmts.filter(stmt => stmt.name == 'ASSIGNMENT').forEach(
+		AST_root.stmts.filter(stmt => stmt.name === 'ASSIGNMENT').forEach(
 			ass => analyze_right_assignment(scope_program, ass.expr, ass.outputs.length))
 
-		AST_root.stmts.filter(stmt => stmt.name == 'BLOCK_DEF').forEach(
+		AST_root.stmts.filter(stmt => stmt.name === 'BLOCK_DEF').forEach(
 			block => analyze_block_body(scope_program, block))
 
 		for (let i in scope_program.elements) {
-			let item = scope_program.elements[i]
-			if (item.kind == 'const' && !item.used)
+			const item = scope_program.elements[i]
+			if (item.kind === 'const' && !item.used)
 				warn(item.kind + " " + i + " not used")
 		}
 
-		return scopes;
+		return scopes
 	}
 
 	function analyze_block_signature(parent_scope, block) {
-		if (block.inputs.some(o => o.name != 'ID'))
+		if (block.inputs.some(o => o.name !== 'ID'))
 			err("Invalid arguments in block definition. Use only IDs")
 		if (block.outputs.some(o => o.init))
 			err("Cannot use '@' in block definitions")
-		if (block.outputs.some(o => o.val == '_'))
+		if (block.outputs.some(o => o.val === '_'))
 			err("Cannot use '_' in block definitions")
 		parent_scope.add(block.id.val, {
 			kind: 		"block",
@@ -115,7 +263,7 @@
 	}
 
 	function analyze_anonym_block_signature(block) {
-		if (block.outputs.some(o => o.val == '_'))
+		if (block.outputs.some(o => o.val === '_'))
 			err("Cannot use '_' in block definitions")
 		if (block.outputs.some(o => o.init))
 			err("Cannot use '@' in block definitions")
@@ -139,24 +287,24 @@
 
 		// Create scopes
 
-		block.body.filter(stmt => stmt.name == 'BLOCK_DEF').forEach(function (block) {
+		block.body.filter(stmt => stmt.name === 'BLOCK_DEF').forEach(function (block) {
 			analyze_block_signature(scope_block, block)
 		})
 
-		block.body.filter(stmt => stmt.name == 'ASSIGNMENT').forEach(function (ass) {
+		block.body.filter(stmt => stmt.name === 'ASSIGNMENT').forEach(function (ass) {
 			ass.outputs.filter(o => !o.init).forEach(function (o) {
 				analyze_left_assignment(scope_block, o)
 			})
 		})
 
-		block.body.filter(stmt => stmt.name == 'ANONYM_BLOCK_DEF').forEach(function (block) {
+		block.body.filter(stmt => stmt.name === 'ANONYM_BLOCK_DEF').forEach(function (block) {
 			block.outputs.filter(o => !o.init).forEach(function (o) {
 				analyze_left_assignment(scope_block, o)
 			})
-			analyze_anonym_block_signature(block);
+			analyze_anonym_block_signature(block)
 		})
 
-		block.body.filter(stmt => stmt.name == 'IF_THEN_ELSE').forEach(function (ifthenelse) {
+		block.body.filter(stmt => stmt.name === 'IF_THEN_ELSE').forEach(function (ifthenelse) {
 			ifthenelse.outputs.filter(o => !o.init).forEach(function (o) {
 				analyze_left_assignment(scope_block, o)
 			})
@@ -166,33 +314,33 @@
 
 		// Validate expr
 
-		block.body.filter(stmt => stmt.name == 'BLOCK_DEF').forEach(function (block) {
+		block.body.filter(stmt => stmt.name === 'BLOCK_DEF').forEach(function (block) {
 			analyze_block_body(scope_block, block)
 		})
 
-		block.body.filter(stmt => stmt.name == 'ANONYM_BLOCK_DEF').forEach(function (block) {
-			analyze_block_body(scope_block, block);
+		block.body.filter(stmt => stmt.name === 'ANONYM_BLOCK_DEF').forEach(function (block) {
+			analyze_block_body(scope_block, block)
 		})
 
-		block.body.filter(stmt => stmt.name == 'ASSIGNMENT').forEach(function (ass) {
+		block.body.filter(stmt => stmt.name === 'ASSIGNMENT').forEach(function (ass) {
 			ass.outputs.filter(o => o.init).forEach(function (o) {
 				analyze_left_assignment_init(scope_block, o)
 			})
 		})
 
-		block.body.filter(stmt => stmt.name == 'ASSIGNMENT').forEach(function (ass) {
+		block.body.filter(stmt => stmt.name === 'ASSIGNMENT').forEach(function (ass) {
 			analyze_right_assignment(scope_block, ass.expr, ass.outputs.length)
 		})
 
-		block.body.filter(stmt => stmt.name == 'IF_THEN_ELSE').forEach(function (ifthenelse) {
+		block.body.filter(stmt => stmt.name === 'IF_THEN_ELSE').forEach(function (ifthenelse) {
 			analyze_right_assignment(scope_block, ifthenelse.condition, 1)
 			analyze_block_body(scope_block, ifthenelse.if)
 			analyze_block_body(scope_block, ifthenelse.else)
 		})
 
 		for (let i in scope_block.elements) {
-			let item = scope_block.elements[i]
-			if (item.kind == 'port_out' && !item.assigned)
+			const item = scope_block.elements[i]
+			if (item.kind === 'port_out' && !item.assigned)
 				err("Output port not assigned: " + i)
 			if (!item.used)
 				warn(item.kind + " " + i + " not used")
@@ -201,19 +349,19 @@
 
 	function analyze_left_assignment(scope, id_node) {
 		if (scope_reserved.find(id_node.val))
-			err(id_node.val + " is a reserved keyword");
+			err(id_node.val + " is a reserved keyword")
 
-		let item = scope.findLocal(id_node.val)
+		const item = scope.findLocal(id_node.val)
 		if (item) {
-			if (item.kind == 'port_in')
+			if (item.kind === 'port_in')
 				err("Input ports cannot be assigned: " + id_node.val)
-			if (item.kind == 'port_out') {
+			if (item.kind === 'port_out') {
 				if (item.assigned)
 					err("Output ports can be assigned only once: " + id_node.val)
 				else
 					item.assigned = true
 			}
-			if (item.kind == 'var' || item.kind == 'const')
+			if (item.kind === 'var' || item.kind === 'const')
 				err("Variables can be assigned only once: " + id_node.val)
 		}
 		else
@@ -224,7 +372,7 @@
 	}
 
 	function analyze_left_assignment_init(scope, id_node) {
-		let item = scope.findLocal(id_node.val)
+		const item = scope.findLocal(id_node.val)
 
 		if (!item)
 			err("Cannot set initial value of undefined: " + id_node.val)
@@ -232,39 +380,39 @@
 		if (item.hasInit)
 			err("Cannot set initial value of variables more than once: " + id_node.val)
 
-		if (item.kind == 'port_in')
+		if (item.kind === 'port_in')
 			err("Cannot set initial value of input ports: " + id_node.val)
 
 		item.hasInit = true
 	}
 
 	function analyze_right_assignment(scope, expr_node, outputsN) {
-		if (expr_node.name == 'ID') {
-			let item = scope.find(expr_node.val)
+		if (expr_node.name === 'ID') {
+			const item = scope.find(expr_node.val)
 
 			if (!item)
 				err("ID not found: " + expr_node.val + ". Scope: \n" + scope)
 
-			if (item.kind == 'var' || item.kind == 'const' || item.kind == 'port_in' || item.kind == 'port_out')
-				item.used = true;
+			if (item.kind === 'var' || item.kind === 'const' || item.kind === 'port_in' || item.kind === 'port_out')
+				item.used = true
 			else
 				err("Unexpected identifier in expression: " + expr_node.val)
 		}
-		else if (expr_node.name == 'CALL_EXPR') {
-			let item = scope.find(expr_node.id.val)
+		else if (expr_node.name === 'CALL_EXPR') {
+			const item = scope.find(expr_node.id.val)
 
 			if (!item) {
 				warn("Using unknown external function " + expr_node.id.val)
 				expr_node.kind = 'FUNC_CALL'
 			}
 			else {
-				if (item.outputsN != outputsN)
+				if (item.outputsN !== outputsN)
 					err(expr_node.id.val + " requires " + item.outputsN + " outputs while " + outputsN + " were provided")
 
-				if (item.inputsN != expr_node.args.length)
+				if (item.inputsN !== expr_node.args.length)
 					err(expr_node.id.val + " requires " + item.inputsN + " inputs while "  + expr_node.args.length + " were provided")
 
-				if (expr_node.id.val == 'delay1')
+				if (expr_node.id.val === 'delay1')
 					expr_node.kind = 'DELAY1_EXPR'
 				else
 					expr_node.kind = 'BLOCK_CALL'
@@ -285,7 +433,8 @@
 	exports["validate"] = validate
 
 }());
-},{}],2:[function(require,module,exports){
+
+},{}],3:[function(require,module,exports){
 (function (process){(function (){
 /* parser generated by jison 0.4.18 */
 /*
@@ -1140,9 +1289,9 @@ case 14:return 53;
 break;
 case 15:return 50;
 break;
-case 16:return 21
+case 16:return 21;
 break;
-case 17:return "ELSE"
+case 17:return "ELSE";
 break;
 case 18:return 52;
 break;
@@ -1201,7 +1350,7 @@ if (typeof module !== 'undefined' && require.main === module) {
 }
 }
 }).call(this)}).call(this,require('_process'))
-},{"_process":13,"fs":8,"path":12}],3:[function(require,module,exports){
+},{"_process":13,"fs":8,"path":12}],4:[function(require,module,exports){
 /*
 	Copyright (C) 2021, 2022 Orastron Srl
 
@@ -1218,6 +1367,7 @@ if (typeof module !== 'undefined' && require.main === module) {
 */
 
 (function() {
+	'use strict'
 
 	function Graph (id) {
 		let self = this
@@ -1227,13 +1377,13 @@ if (typeof module !== 'undefined' && require.main === module) {
 		this.input_ports = []  // external input
 		this.output_ports = [] // output toward outside
 		this.getOutputBlocks = function (block) {
-			let cs = self.connections.filter(c => c.in.block == block)
+			let cs = self.connections.filter(c => c.in.block === block)
 			cs.sort((a, b) => block.output_ports.indexOf(a.in) < block.output_ports.indexOf(b.in) ? -1 : 1)
 			return cs.map(p => p.out.block)
 		}
 		this.getInputBlocks = function (block) {
-			return block.input_ports.map(p => self.connections.find(c => c.out == p)).filter(
-				c => c != undefined).map(c => c.in.block)
+			return block.input_ports.map(p => self.connections.find(c => c.out === p)).filter(
+				c => c !== undefined).map(c => c.in.block)
 		}
 		this.clone = function () {
 			let c = new Graph(self.id)
@@ -1265,7 +1415,7 @@ if (typeof module !== 'undefined' && require.main === module) {
 
 			self.blocks.forEach(b => delete b.__son__)
 
-			return c;
+			return c
 		}
 		this.cloneSubGraph = function (blocks) {
 			let c = new Graph(self.id + "_sub")
@@ -1284,10 +1434,10 @@ if (typeof module !== 'undefined' && require.main === module) {
 				c.connections.push(new_conn)
 			})
 
-			blocks.filter(b => b.operation == "IF_THEN_ELSE").forEach(b => {
+			blocks.filter(b => b.operation === "IF_THEN_ELSE").forEach(b => {
 				blocks.forEach(bb => {
-					let io = bb.__son__.if_owners.find(io => io.ifblock == b)
-					if (io != undefined) {
+					let io = bb.__son__.if_owners.find(io => io.ifblock === b)
+					if (io !== undefined) {
 						let ioi = bb.__son__.if_owners.indexOf(io)
 						bb.__son__.if_owners.splice(ioi, 1, {ifblock: b.__son__, branch: io.branch})
 					}
@@ -1296,7 +1446,7 @@ if (typeof module !== 'undefined' && require.main === module) {
 
 			//blocks.forEach(b => delete b.__son__)
 
-			return c;
+			return c
 		}
 		this.merge = function (g) {
 			self.blocks = self.blocks.concat(g.blocks)
@@ -1319,11 +1469,11 @@ if (typeof module !== 'undefined' && require.main === module) {
 			s += this.blocks.map(b => '\t\t' + b.toString()).join('\n') + "\n\t],"
 			s += ' connections: [\n'
 			s += this.connections.map(c => '\t\t' + c.toString()).join('\n') + "\n\t]\n}"
-			return s;
+			return s
 		}
 	}
 
-	var blocksCounter = 0;
+	let blocksCounter = 0
 
 	function Block (nInputs = 0, nOutputs = 0, operation = "", id = "", postfix = "", val = NaN, if_owners = []) {
 		let self = this
@@ -1345,7 +1495,7 @@ if (typeof module !== 'undefined' && require.main === module) {
 				(p1, p2) { return  max(p1, p2)})
 		}
 		this.propagateUpdateRate = function () {
-			if (self.operation == "IF_THEN_ELSE") {
+			if (self.operation === "IF_THEN_ELSE") {
 				let cond_update_rate = self.input_ports[0].update_rate
 				for (let i = 0; i < self.output_ports.length; i++) {
 					let m = max(
@@ -1361,7 +1511,7 @@ if (typeof module !== 'undefined' && require.main === module) {
 			}
 		}
 		this.clone = function () {
-			let c = new Block(self.input_ports.length, self.output_ports.length, self.operation, self.id, self.postfix, self.val, self.if_owners);
+			let c = new Block(self.input_ports.length, self.output_ports.length, self.operation, self.id, self.postfix, self.val, self.if_owners)
 			c.ifoutputindex = self.ifoutputindex
 			c.block_init = self.block_init
 			return c
@@ -1400,7 +1550,7 @@ if (typeof module !== 'undefined' && require.main === module) {
 
 	function max (x1, ...xn) {
 		let M = x1
-		for (a of xn)
+		for (let a of xn)
 			if (a > M)
 				M = a
 		return M
@@ -1438,7 +1588,7 @@ if (typeof module !== 'undefined' && require.main === module) {
 			let named_vars 	= {}
 			let expansions_count = 0
 
-			AST_root.stmts.filter(stmt => stmt.name == 'BLOCK_DEF').forEach(block => named_blocks[block.id.val] = block)
+			AST_root.stmts.filter(stmt => stmt.name === 'BLOCK_DEF').forEach(block => named_blocks[block.id.val] = block)
 
 			if (!named_blocks[initial_block])
 				throw new Error("Undefined initial block: " + initial_block + ". Available blocks: " + Object.keys(named_blocks))
@@ -1449,13 +1599,13 @@ if (typeof module !== 'undefined' && require.main === module) {
 			named_vars[block_fs.id] = block_fs
 			graph.blocks.push(block_fs)
 
-			AST_root.stmts.filter(stmt => stmt.name == 'ASSIGNMENT').forEach(stmt => stmt.outputs.forEach(function (output) {
+			AST_root.stmts.filter(stmt => stmt.name === 'ASSIGNMENT').forEach(stmt => stmt.outputs.forEach(function (output) {
 				let block_const = new Block(1, 1, 'VAR', output.val, postfix, NaN, undefined)
 				named_vars[block_const.id] = block_const
 				graph.blocks.push(block_const)
 			}))
 
-			AST_root.stmts.filter(stmt => stmt.name == 'ASSIGNMENT').forEach(stmt => {
+			AST_root.stmts.filter(stmt => stmt.name === 'ASSIGNMENT').forEach(stmt => {
 				let ports = convertExpr(stmt.expr, {}, named_blocks, named_vars, [])
 				stmt.outputs.forEach((output, index) => {
 					let block_const = named_vars[output.val]
@@ -1472,12 +1622,12 @@ if (typeof module !== 'undefined' && require.main === module) {
 
 			function expandCompositeBlock (block, expansion_stack, named_blocks, named_vars, if_owners) {
 				expansions_count++
-				if (block.id.val != "" && expansion_stack[block.id.val])
+				if (block.id.val !== '' && expansion_stack[block.id.val])
 					throw new Error("Recursive block expansion. Stack: " + Object.keys(expansion_stack) + "," + block.id.val)
 				expansion_stack[block.id.val] = true
 
 				let prefix  = '_' + block.id.val + '_'
-				let postfix = expansions_count == 1 ? "" : '_' + expansions_count
+				let postfix = expansions_count === 1 ? "" : '_' + expansions_count
 
 				let input_ports = []
 				let output_ports = []
@@ -1489,14 +1639,14 @@ if (typeof module !== 'undefined' && require.main === module) {
 					input_ports.push(block_var.input_ports[0])
 				})
 
-				block.body.filter(stmt => stmt.name == 'BLOCK_DEF').forEach(block => named_blocks[block.id.val] = block)
+				block.body.filter(stmt => stmt.name === 'BLOCK_DEF').forEach(block => named_blocks[block.id.val] = block)
 
 				block.body.filter(stmt => ['ASSIGNMENT', 'ANONYM_BLOCK_DEF', 'IF_THEN_ELSE'].includes(stmt.name)).forEach(
 					stmt => stmt.outputs.forEach((output, index) => {
 						if (output.init)
 							return
 						let block_var = new Block(1, 1, "VAR", output.val, postfix, NaN, if_owners)
-						if (stmt.name == 'IF_THEN_ELSE')
+						if (stmt.name === 'IF_THEN_ELSE')
 							block_var.ifoutputindex = index
 						named_vars[block_var.id] = block_var
 						graph.blocks.push(block_var)
@@ -1508,12 +1658,12 @@ if (typeof module !== 'undefined' && require.main === module) {
 				})
 
 				block.body.filter(stmt => ['ASSIGNMENT', 'ANONYM_BLOCK_DEF', 'IF_THEN_ELSE'].includes(stmt.name)).forEach(function (stmt) {
-					let ports;
-					if (stmt.name == 'ASSIGNMENT')
+					let ports
+					if (stmt.name === 'ASSIGNMENT')
 						ports = convertExpr(stmt.expr, {...expansion_stack}, {...named_blocks}, {...named_vars}, if_owners)
-					else if (stmt.name == 'ANONYM_BLOCK_DEF')
+					else if (stmt.name === 'ANONYM_BLOCK_DEF')
 						ports = expandCompositeBlock(stmt, {...expansion_stack}, {...named_blocks}, {...named_vars}, if_owners)
-					else if (stmt.name == 'IF_THEN_ELSE')
+					else if (stmt.name === 'IF_THEN_ELSE')
 						ports = convertIfthenelse(stmt, expansion_stack, named_blocks, named_vars, if_owners)
 
 					stmt.outputs.forEach(function (output, index) {
@@ -1534,7 +1684,7 @@ if (typeof module !== 'undefined' && require.main === module) {
 			}
 
 			function convertExpr(expr_node, expansion_stack, named_blocks, named_vars, if_owners) {
-				let block_expr;
+				let block_expr
 
 				let input_ports = []
 				let output_ports = []
@@ -1638,19 +1788,19 @@ if (typeof module !== 'undefined' && require.main === module) {
 				}
 			}
 			graph_init.blocks.forEach(function (block, blocki) {
-				if (block.operation == 'DELAY1_EXPR') {
+				if (block.operation === 'DELAY1_EXPR') {
 					let input_block = graph_init.getInputBlocks(block)[0]
 					graph_init.output_ports = graph_init.output_ports.concat(input_block.output_ports)
 					graph.getInputBlocks(graph.blocks[blocki])[0].block_init = input_block
 				}
 			})
 
-			graph_init.blocks.filter(b => b.operation == 'VAR').forEach(b => b.postfix = b.postfix + "_I")
+			graph_init.blocks.filter(b => b.operation === 'VAR').forEach(b => b.postfix = b.postfix + "_I")
 
 			graph_init.input_ports.map(p => p.block).forEach(function (block, blocki) {
 				block.operation = 'NUMBER'
 				block.input_ports = []
-				if (initial_values[block.id])
+				if (initial_values[block.id] !== undefined)
 					block.val = initial_values[block.id]
 				else
 					block.val = 0
@@ -1664,7 +1814,7 @@ if (typeof module !== 'undefined' && require.main === module) {
 			
 			graph.output_ports.forEach(p => visitNode(p.block))
 			function visitNode(block, i) {
-				if (block.operation == 'IF_THEN_ELSE') {
+				if (block.operation === 'IF_THEN_ELSE') {
 					if (!block.visited) 
 						block.visited = []
 					if (block.visited.includes(i))
@@ -1672,7 +1822,7 @@ if (typeof module !== 'undefined' && require.main === module) {
 					block.visited.push(i)
 
 					let inbs = graph.getInputBlocks(block)
-					if (block.visited.length == 1) {
+					if (block.visited.length === 1) {
 						visitNode(inbs[0], NaN)
 						newGraph.blocks.push(block)
 					}
@@ -1689,7 +1839,7 @@ if (typeof module !== 'undefined' && require.main === module) {
 				}
 			}
 
-			graph.blocks.filter(b => b.visited && b.operation == "IF_THEN_ELSE").forEach(b => {
+			graph.blocks.filter(b => b.visited && b.operation === "IF_THEN_ELSE").forEach(b => {
 				for (let i = b.output_ports.length - 1; i >= 0; i--) {
 					if (!b.visited.includes(i)) {
 						b.input_ports.splice(i + 1 + b.output_ports.length, 1)
@@ -1700,8 +1850,8 @@ if (typeof module !== 'undefined' && require.main === module) {
 			})
 
 			newGraph.connections = graph.connections.filter(c => 
-				  	newGraph.blocks.some(b => b == c.out.block && b.input_ports.concat(b.output_ports).includes(c.out))
-				&& 	newGraph.blocks.some(b => b == c.in.block  && b.input_ports.concat(b.output_ports).includes(c.in))
+				  	newGraph.blocks.some(b => b === c.out.block && b.input_ports.concat(b.output_ports).includes(c.out))
+				&& 	newGraph.blocks.some(b => b === c.in.block  && b.input_ports.concat(b.output_ports).includes(c.in))
 			)
 			newGraph.connections = Array.from(new Set(newGraph.connections))
 
@@ -1715,23 +1865,23 @@ if (typeof module !== 'undefined' && require.main === module) {
 
 		function setStartingUpdateRates (graph) {
 			graph.input_ports.map(p => p.block).forEach(function (block) {
-				if (control_inputs.some(ctr => ctr == block.id))
+				if (control_inputs.some(ctr => ctr === block.id))
 					block.input_ports.forEach(p => p.update_rate = 2)
 				else
 					block.input_ports.forEach(p => p.update_rate = 3)
 			})
-			graph.blocks.filter(block => block.operation == 'NUMBER').forEach(
+			graph.blocks.filter(block => block.operation === 'NUMBER').forEach(
 				block => block.output_ports[0].update_rate = 0)
-			graph.blocks.filter(block => block.operation == 'SAMPLERATE').forEach(
+			graph.blocks.filter(block => block.operation === 'SAMPLERATE').forEach(
 				block => block.output_ports[0].update_rate = 1)
-			graph.blocks.filter(block => block.operation == 'DELAY1_EXPR').forEach(
+			graph.blocks.filter(block => block.operation === 'DELAY1_EXPR').forEach(
 				block => block.output_ports[0].update_rate = 3)
 		}
 
 		function setStartingUpdateRatesInit (graph_init) {
-			graph_init.blocks.filter(block => block.operation == 'NUMBER').forEach(
+			graph_init.blocks.filter(block => block.operation === 'NUMBER').forEach(
 				block => block.output_ports[0].update_rate = 0)
-			graph_init.blocks.filter(block => block.operation == 'SAMPLERATE').forEach(
+			graph_init.blocks.filter(block => block.operation === 'SAMPLERATE').forEach(
 				block => block.output_ports[0].update_rate = 1)
 		}
 
@@ -1748,7 +1898,7 @@ if (typeof module !== 'undefined' && require.main === module) {
 
 				let input_blocks = graph.getInputBlocks(block)
 
-				if (block.operation == 'DELAY1_EXPR') {
+				if (block.operation === 'DELAY1_EXPR') {
 					blocks_delay.push(input_blocks[0])
 				}
 				else {
@@ -1756,7 +1906,7 @@ if (typeof module !== 'undefined' && require.main === module) {
 					block.propagateUpdateRate()
 				}
 
-				graph.connections.filter(c => c.in.block == block).forEach(
+				graph.connections.filter(c => c.in.block === block).forEach(
 					c => c.out.update_rate = c.in.update_rate)
 			}
 
@@ -1766,7 +1916,7 @@ if (typeof module !== 'undefined' && require.main === module) {
 		function propagateUpdateRateInit (graph_init) {
 			graph_init.crossDFS(function (block) {
 				block.propagateUpdateRate()
-				graph_init.connections.filter(c => c.in.block == block).forEach(
+				graph_init.connections.filter(c => c.in.block === block).forEach(
 					c => c.out.update_rate = block.output_ports[0].update_rate)
 			})
 		}
@@ -1781,7 +1931,7 @@ if (typeof module !== 'undefined' && require.main === module) {
 					return
 				block.visited1 = true
 
-				if (block.operation == 'IF_THEN_ELSE' && !block.handled) {
+				if (block.operation === 'IF_THEN_ELSE' && !block.handled) {
 					visitIfThenElse(block)
 				}
 				graph.getInputBlocks(block).forEach(b => visitBlock1(b))
@@ -1812,16 +1962,16 @@ if (typeof module !== 'undefined' && require.main === module) {
 				})
 
 				// We're just interested in the bool
-				graph.blocks.filter(b => b.__tobecopied__ != undefined).forEach(b => {
+				graph.blocks.filter(b => b.__tobecopied__ !== undefined).forEach(b => {
 					b.__tobecopied__ = b.__tobecopied__.res
 				})
 				
 				function visitBlock2(block) {
-					if (block == ifthenelse)
+					if (block === ifthenelse)
 						return "found"
-					if (block.__tobecopied__ == undefined)
+					if (block.__tobecopied__ === undefined)
 						block.__tobecopied__ = new MagicOR()
-					if (block.operation == "DELAY1_EXPR") {
+					if (block.operation === "DELAY1_EXPR") {
 						block.__tobecopied__.res = false
 						return
 					}
@@ -1831,7 +1981,7 @@ if (typeof module !== 'undefined' && require.main === module) {
 
 					graph.getInputBlocks(block).forEach(b => {
 						let ret = visitBlock2(b)
-						if (ret == "found") {
+						if (ret === "found") {
 							//block.__ifoutput__ = true
 							block.__tobecopied__.res = true
 							return
@@ -1841,13 +1991,13 @@ if (typeof module !== 'undefined' && require.main === module) {
 				}
 
 				// If an if has to be copied, all its blocks have to too
-				graph.blocks.filter(b => b.__tobecopied__ && b.operation == "IF_THEN_ELSE").forEach(b => {
+				graph.blocks.filter(b => b.__tobecopied__ && b.operation === "IF_THEN_ELSE").forEach(b => {
 					graph.blocks.filter(bb => bb.if_owners.map(i => i.ifblock).includes(b)).forEach(bb => {
 						bb.__tobecopied__ = true
 					})
 				})
 
-				//graph.blocks.filter(b => b.operation == "TIMES_EXPR").forEach(b=>
+				//graph.blocks.filter(b => b.operation === "TIMES_EXPR").forEach(b=>
 				
 				let tobecopied_blocks = graph.blocks.filter(b => b.__tobecopied__)
 				let copied_subgraph = graph.cloneSubGraph(tobecopied_blocks)
@@ -1858,7 +2008,7 @@ if (typeof module !== 'undefined' && require.main === module) {
 					// remove conections to the second branch
 					let tobedeleted_connections = graph.connections.filter(c => 
 									c.in.block.__tobecopied__
-								&& 	c.out.block.if_owners.some(i => i.ifblock == ifthenelse && i.branch != 0))
+								&& 	c.out.block.if_owners.some(i => i.ifblock === ifthenelse && i.branch !== 0))
 					
 					tobedeleted_connections.forEach(dc => graph.connections.splice(graph.connections.indexOf(dc), 1))
 
@@ -1876,7 +2026,7 @@ if (typeof module !== 'undefined' && require.main === module) {
 				{
 					let tobedeleted_connections = copied_subgraph.connections.filter(c =>
 							copied_subgraph.blocks.includes(c.in.block) 
-						&& 	c.out.block.if_owners.some(i => i.ifblock == ifthenelse && i.branch != 1))
+						&& 	c.out.block.if_owners.some(i => i.ifblock === ifthenelse && i.branch !== 1))
 					tobedeleted_connections.forEach(dc => copied_subgraph.connections.splice(copied_subgraph.connections.indexOf(dc), 1))
 
 					let tobeedited_connections = copied_subgraph.connections.filter(
@@ -1888,16 +2038,16 @@ if (typeof module !== 'undefined' && require.main === module) {
 						})
 				}
 
-				//graph.blocks.filter(b => b.operation == "TIMES_EXPR").forEach(b=>
+				//graph.blocks.filter(b => b.operation === "TIMES_EXPR").forEach(b=>
 			
 				// Let's put the variables out
 				// The inner variables of the "inner" IFs must not be put out
 				let copiedifs = graph.blocks.filter(b =>
-					b.operation == "IF_THEN_ELSE" && b.__tobecopied__)
+					b.operation === "IF_THEN_ELSE" && b.__tobecopied__)
 				let copiedifinnervariables = graph.blocks.filter(b =>
-					b.operation == "VAR" && b.if_owners.map(i => i.ifblock).some(ib => copiedifs.includes(ib)))
+					b.operation === "VAR" && b.if_owners.map(i => i.ifblock).some(ib => copiedifs.includes(ib)))
 				let variables = graph.blocks.filter(b => 
-					b.__tobecopied__ && !copiedifinnervariables.includes(b)).filter(b => b.operation == "VAR")
+					b.__tobecopied__ && !copiedifinnervariables.includes(b)).filter(b => b.operation === "VAR")
 
 
 				variables.forEach(v => {
@@ -1913,16 +2063,16 @@ if (typeof module !== 'undefined' && require.main === module) {
 					newblockvar.ifoutputindex = ifthenelse.output_ports.length - 1
 					newblockvar.block_init = v.block_init
 
-					graph.connections.filter(c => c.in.block == v && !c.out.block.if_owners.some(i => i.ifblock == ifthenelse)).forEach(c => {
-						let c2 = copied_subgraph.connections.find(cc => cc.in.block == c.in.block.__son__ && cc.out == c.out)
+					graph.connections.filter(c => c.in.block === v && !c.out.block.if_owners.some(i => i.ifblock === ifthenelse)).forEach(c => {
+						let c2 = copied_subgraph.connections.find(cc => cc.in.block === c.in.block.__son__ && cc.out === c.out)
 						c.in = newblockvar.output_ports[0]
 						copied_subgraph.connections.splice(copied_subgraph.connections.indexOf(c2), 1)
 					})
 
-					graph.connections.filter(c => c.in.block == v && c.out.block.operation == 'DELAY1_EXPR').forEach(c => {
+					graph.connections.filter(c => c.in.block === v && c.out.block.operation === 'DELAY1_EXPR').forEach(c => {
 						c.in = newblockvar.output_ports[0]
 					})
-					copied_subgraph.connections.filter(c => c.in.block == v.__son__ && c.out.block.operation == 'DELAY1_EXPR').forEach(c => {
+					copied_subgraph.connections.filter(c => c.in.block === v.__son__ && c.out.block.operation === 'DELAY1_EXPR').forEach(c => {
 						c.in = newblockvar.output_ports[0]
 					})
 
@@ -1931,7 +2081,7 @@ if (typeof module !== 'undefined' && require.main === module) {
 					graph.connections.push(new Connection(v.__son__.output_ports[0], newinport2))
 
 					let oid = graph.output_ports.indexOf(v.output_ports[0])
-					if (oid != -1) {
+					if (oid !== -1) {
 						graph.output_ports[oid] = newblockvar.output_ports[0]
 					}
 
@@ -1975,7 +2125,7 @@ if (typeof module !== 'undefined' && require.main === module) {
 				}
 				this.res = undefined
 				this.compute = function (stack = []) {
-					if (self.res != undefined)
+					if (self.res !== undefined)
 						return self.res
 					if (stack.includes(self)) 
 						return undefined
@@ -1983,7 +2133,7 @@ if (typeof module !== 'undefined' && require.main === module) {
 					let left = false
 					for (let o of self.ops) {
 						let r = o.compute([...stack])
-						if (r != undefined) {
+						if (r !== undefined) {
 							if (r) {
 								self.res = true
 								break
@@ -1992,7 +2142,7 @@ if (typeof module !== 'undefined' && require.main === module) {
 						else
 							left = true
 					}
-					if (self.res == undefined) {
+					if (self.res === undefined) {
 						if (left)
 							return undefined
 						else
@@ -2002,7 +2152,7 @@ if (typeof module !== 'undefined' && require.main === module) {
 						o.compute([...stack])
 					return self.res
 				}
-				for (i of init)
+				for (let i of init)
 					self.add(i)
 			}
 		}
@@ -2026,7 +2176,7 @@ if (typeof module !== 'undefined' && require.main === module) {
 			}
 
 			function propagateControlDependencies () {
-				graph.input_ports.filter(p => p.update_rate == 2).forEach(function (p) {
+				graph.input_ports.filter(p => p.update_rate === 2).forEach(function (p) {
 					visitBlock(p.block, p.block.label())
 					graph.blocks.forEach(b => delete b.visited)
 				})
@@ -2046,7 +2196,8 @@ if (typeof module !== 'undefined' && require.main === module) {
 	exports["ASTToGraph"] = ASTToGraph
 
 }());
-},{}],4:[function(require,module,exports){
+
+},{}],5:[function(require,module,exports){
 /*
 	Copyright (C) 2021, 2022 Orastron Srl
 
@@ -2063,19 +2214,20 @@ if (typeof module !== 'undefined' && require.main === module) {
 */
 
 (function() {
+	'use strict'
 	function getIndexer (target_lang, index) {
 		if (['C', 'cpp', 'VST2', 'yaaaeapa', 'd', 'js'].includes(target_lang))
 			return "[" + index + "]"
-		else if (target_lang == 'MATLAB')
+		else if (target_lang === 'MATLAB')
 			return "(" + index + ")"
 	}
 
 	function getNumber(target_lang, n) {
 		if (['C', 'cpp', 'VST2', 'yaaaeapa', 'd'].includes(target_lang))
-			return n + ((n.includes('.') || n.toLowerCase().includes('e')) ? 'f' : '.0f');
+			return n + ((n.includes('.') || n.toLowerCase().includes('e')) ? 'f' : '.0f')
 		else if (['MATLAB', 'js'].includes(target_lang))
-			return n;
-		return n;
+			return n
+		return n
 	}
 
 	function getIdPrefix(target_lang) {
@@ -2098,11 +2250,11 @@ if (typeof module !== 'undefined' && require.main === module) {
 	function convert(doT, templates, target_lang, graph, graph_init, schedule, schedule_init) {
 		
 		const ct = getConstType(target_lang)
-		var MagicStringProto = {
+		const MagicStringProto = {
 			s: null,
 			add: function(...x) {
 				for (let k of x) {
-					if (k == undefined) {
+					if (k === undefined) {
 						throw new Error(k)
 					}
 					this.s.push(k)
@@ -2117,17 +2269,17 @@ if (typeof module !== 'undefined' && require.main === module) {
 			}
 		}
 		function MagicString(...init) {
-			var m = Object.create(MagicStringProto);
+			const m = Object.create(MagicStringProto)
 			m.s = []
 			for (let i of init)
 				m.add(i)	
-			return m;
+			return m
 		}
 
-		let program = {
+		const program = {
 			class_name: 	graph.id,
-			control_inputs: graph.input_ports.filter(p => p.update_rate == 2).map(p => p.block.label()),
-			audio_inputs: 	graph.input_ports.filter(p => p.update_rate == 3).map(p => p.block.label()),
+			control_inputs: graph.input_ports.filter(p => p.update_rate === 2).map(p => p.block.label()),
+			audio_inputs: 	graph.input_ports.filter(p => p.update_rate === 3).map(p => p.block.label()),
 			outputs: 		[],
 
 			declarations1: 	[],
@@ -2157,38 +2309,38 @@ if (typeof module !== 'undefined' && require.main === module) {
 		graph.output_ports.forEach(op => op.block.operation = "VAR_OUT")
 		graph_init.input_ports.forEach(ip => ip.block.operation = 'VAR_IN')
 
-		const id_prefix_ = getIdPrefix(target_lang);
+		const id_prefix_ = getIdPrefix(target_lang)
 
 		schedule.forEach(block => convertBlock(block))
 		schedule_init.forEach(block => convertBlockInit(block))
 
 		for (let outi = 0; outi < graph.output_ports.length; outi++) {
-			program.outputs[outi] = graph.output_ports[outi].block.label() + '_out_';
+			program.outputs[outi] = graph.output_ports[outi].block.label() + '_out_'
 			appendAssignment(program.outputs[outi] + getIndexer(target_lang, 'i'), graph.output_ports[outi].code, 5, null)
 		}
 
 		groupControls()
 
-		graph.input_ports.filter(p => p.update_rate == 2).map(p => p.block).forEach(function (block) {
-			program.declarations2.push(MagicString(block.output_ports[0].code));
-			program.init.push(MagicString(block.output_ports[0].code, " = ", getNumber(target_lang, block.block_init.output_ports[0].code.toString())));
+		graph.input_ports.filter(p => p.update_rate === 2).map(p => p.block).forEach(function (block) {
+			program.declarations2.push(MagicString(block.output_ports[0].code))
+			program.init.push(MagicString(block.output_ports[0].code, " = ", getNumber(target_lang, block.block_init.output_ports[0].code.toString())))
 		})
 
 		doT.templateSettings.strip = false
 	
-		if (target_lang == 'C') {
+		if (target_lang === 'C') {
 			return [
 				{ name: graph.id + ".h", str: doT.template(templates["C_h"])(program) },
 				{ name: graph.id + ".c", str: doT.template(templates["C_c"])(program) },
 			]
 		}
-		else if (target_lang == 'cpp') {
+		else if (target_lang === 'cpp') {
 			return [
 				{ name: graph.id + ".h", str: doT.template(templates["cpp_h"])(program) },
 				{ name: graph.id + ".cpp", str: doT.template(templates["cpp_cpp"])(program) }
 			]
 		}
-		else if (target_lang == 'VST2') {
+		else if (target_lang === 'VST2') {
 			return [
 				{ name: graph.id + ".h", str: doT.template(templates["cpp_h"])(program) },
 				{ name: graph.id + ".cpp", str: doT.template(templates["cpp_cpp"])(program) },
@@ -2196,25 +2348,25 @@ if (typeof module !== 'undefined' && require.main === module) {
 				{ name: graph.id + "_vst2_wrapper.cpp", str: doT.template(templates["vst2_wrapper_cpp"])(program) }
 			]
 		}
-		else if (target_lang == 'yaaaeapa') {
+		else if (target_lang === 'yaaaeapa') {
 			return [
 				{ name: graph.id + ".h", str: doT.template(templates["C_h"])(program) },
 				{ name: graph.id + ".c", str: doT.template(templates["C_c"])(program) },
 				{ name: graph.id + "_yaaaeapa_wrapper.c", str: doT.template(templates["yaaaeapa_wrapper_c"])(program) }
 			]
 		}
-		else if (target_lang == 'MATLAB') {
+		else if (target_lang === 'MATLAB') {
 			return [
 				{ name: graph.id + '.m', str: doT.template(templates["matlab"])(program) }
 			]
 		}
-		else if (target_lang == "js") {
+		else if (target_lang === "js") {
 			return [
 				{ name: "main.html", str: doT.template(templates["js_html"])(program) },
 				{ name: "processor.js", str: doT.template(templates["js_processor"])(program) }
 			]
 		}
-		else if (target_lang == "d") {
+		else if (target_lang === "d") {
 			return [
 				{ name: "d_processor.d", str: doT.template(templates["d_processor"])(program) }
 			]
@@ -2231,23 +2383,23 @@ if (typeof module !== 'undefined' && require.main === module) {
 			const auxcode = MagicString()
 
 			let is_used_locally = true
-			is_used_locally = output_blocks.every(b => b.output_ports[0].update_rate == update_rate)
-			if (update_rate == 2 && is_used_locally)
+			is_used_locally = output_blocks.every(b => b.output_ports[0].update_rate === update_rate)
+			if (update_rate === 2 && is_used_locally)
 				is_used_locally = output_blocks.every(b => checkSetEquality(b.control_dependencies, block.control_dependencies))
 			if (is_used_locally && block.if_owners.length > 0) {
 				let bb = block.if_owners[block.if_owners.length - 1]
-				is_used_locally = output_blocks.every(b => b.if_owners.some(i => i.ifblock == bb.ifblock && i.branch == bb.branch))
-				if (output_blocks.some(b => b.operation == "DELAY1_EXPR"))
-					is_used_locally = false;
+				is_used_locally = output_blocks.every(b => b.if_owners.some(i => i.ifblock === bb.ifblock && i.branch === bb.branch))
+				if (output_blocks.some(b => b.operation === "DELAY1_EXPR"))
+					is_used_locally = false
 			}
-			const id_prefix = is_used_locally || update_rate == 0 ? "" : id_prefix_;
+			const id_prefix = is_used_locally || update_rate === 0 ? "" : id_prefix_
 
 			if (!block.output_ports[0].toBeCached) {
-				if (update_rate == 2 && !checkSetEquality(output_blocks[0].control_dependencies, block.control_dependencies))
+				if (update_rate === 2 && output_blocks.length > 0 && !checkSetEquality(output_blocks[0].control_dependencies, block.control_dependencies))
 					block.output_ports[0].toBeCached = true;
 			}
 
-			if (block.ifoutputindex != undefined && !isNaN(block.ifoutputindex)) {
+			if (block.ifoutputindex !== undefined && !isNaN(block.ifoutputindex)) {
 				code.add(id_prefix_, block.label())
 				appendAssignment(code, "",  666, null, true, false, null)
 				return
@@ -2255,7 +2407,7 @@ if (typeof module !== 'undefined' && require.main === module) {
 
 			switch (block.operation) {
 				case 'VAR':
-					if (input_blocks[0].operation == 'NUMBER')
+					if (input_blocks[0].operation === 'NUMBER')
 						code.add(input_blocks_code[0])
 					else if (block.output_ports[0].toBeCached || output_blocks.length > 1) {
 						code.add(id_prefix, block.label())
@@ -2265,10 +2417,10 @@ if (typeof module !== 'undefined' && require.main === module) {
 						code.add(input_blocks_code[0])
 					return
 				case 'VAR_IN':
-					if (update_rate == 3) {
+					if (update_rate === 3) {
 						code.add(block.label(), getIndexer(target_lang, 'i'))
 					}
-					else if (update_rate == 2)
+					else if (update_rate === 2)
 						code.add(id_prefix_, block.label())
 					return
 				case 'VAR_OUT':
@@ -2282,7 +2434,7 @@ if (typeof module !== 'undefined' && require.main === module) {
 					appendAssignment(code, input_blocks[0].block_init.output_ports[0].code, -1, null, true, false, block.if_owners)
 					return
 				case 'NUMBER':
-					code.add(getNumber(target_lang, block.val.toString()));
+					code.add(getNumber(target_lang, block.val.toString()))
 					return
 				case 'SAMPLERATE':
 					code.add(id_prefix_, 'fs')
@@ -2295,7 +2447,7 @@ if (typeof module !== 'undefined' && require.main === module) {
 						code.add('_branch1_') // 5
 						code.add("\n}\n")
 					}
-					else if (target_lang == 'MATLAB') {
+					else if (target_lang === 'MATLAB') {
 						code.add("if (", input_blocks_code[0], ')\n')
 						code.add('_branch0_') // 3
 						code.add("\nelse\n")
@@ -2323,7 +2475,7 @@ if (typeof module !== 'undefined' && require.main === module) {
 					auxcode.add(block.id, '(')
 					for (let ii = 0; ii < input_blocks_code.length; ii++) {
 						auxcode.add(input_blocks_code[ii])
-						if (ii != input_blocks_code.length - 1)
+						if (ii !== input_blocks_code.length - 1)
 							auxcode.add(', ')
 					}
 					auxcode.add(')')
@@ -2373,7 +2525,7 @@ if (typeof module !== 'undefined' && require.main === module) {
 			const output_blocks = graph_init.getOutputBlocks(block)
 			const input_blocks_code = input_blocks.map(b => b.output_ports[0].code)
 			const update_rate = block.output_ports[0].update_rate
-			const level = update_rate == 2 ? -2 : update_rate
+			const level = update_rate === 2 ? -2 : update_rate
 			const code = block.output_ports[0].code
 
 			const auxcode = MagicString()
@@ -2385,13 +2537,13 @@ if (typeof module !== 'undefined' && require.main === module) {
 				is_used_locally = output_blocks.every(b => checkSetEquality(b.control_dependencies, block.control_dependencies))
 			*/
 			// TMP... TODO: fix
-			is_used_locally = false;
+			is_used_locally = false
 
-			const id_prefix = is_used_locally || update_rate == 0 ? "" : id_prefix_;
+			const id_prefix = is_used_locally || update_rate === 0 ? "" : id_prefix_
 
 			switch (block.operation) {
 				case 'VAR':
-					if (input_blocks[0].operation == 'NUMBER')
+					if (input_blocks[0].operation === 'NUMBER')
 						code.add(input_blocks_code[0])
 					else if (block.output_ports[0].toBeCached || output_blocks.length > 1) {
 						code.add(id_prefix, block.label())
@@ -2401,7 +2553,7 @@ if (typeof module !== 'undefined' && require.main === module) {
 						code.add(input_blocks_code[0])
 					return
 				case 'VAR_IN':
-					if (update_rate == 0)
+					if (update_rate === 0)
 						code.add(block.val) // This surely is a number
 					else
 						throw new Error("Unexpected update_rate in init graph " + block + ": " + update_rate)
@@ -2410,7 +2562,7 @@ if (typeof module !== 'undefined' && require.main === module) {
 					code.add(input_blocks_code[0])
 					return
 				case 'NUMBER':
-					code.add(getNumber(target_lang, block.val.toString()));
+					code.add(getNumber(target_lang, block.val.toString()))
 					return
 				case 'SAMPLERATE':
 					code.add(id_prefix, 'fs')
@@ -2434,11 +2586,11 @@ if (typeof module !== 'undefined' && require.main === module) {
 					auxcode.add(block.id, '(')
 					for (let ii = 0; ii < input_blocks_code.length; ii++) {
 						auxcode.add(input_blocks_code[ii])
-						if (ii != input_blocks_code.length - 1)
+						if (ii !== input_blocks_code.length - 1)
 							auxcode.add(', ')
 					}
 					auxcode.add(')')
-					break;
+					break
 				case 'OR_EXPR':
 					auxcode.add('(', input_blocks_code[0], ' || ', input_blocks_code[1], ')')
 					break
@@ -2484,11 +2636,11 @@ if (typeof module !== 'undefined' && require.main === module) {
 			stmt.if_owners = if_owners
 
 			if (is_used_locally) {
-				if (level != 0)
+				if (level !== 0)
 					stmt.is_used_locally = true
 			}
 			else {
-				if (to_be_declared && level != 0) {
+				if (to_be_declared && level !== 0) {
 					program.declarations1.push(left)
 					program.init.push(MagicString(left, ' = ', getNumber(target_lang, "0")))
 				}
@@ -2525,7 +2677,7 @@ if (typeof module !== 'undefined' && require.main === module) {
 
 		function appendIfStatement(block, code, cond_level, if_owners, output_blocks, input_blocks, control_dependencies) {
 
-			if (block.output_ports.length != output_blocks.length)
+			if (block.output_ports.length !== output_blocks.length)
 				throw new Error("Something is wrong")
 
 			const levels = ["constant_rate", "sampling_rate", "controls_rate", "audio_rate"]
@@ -2534,16 +2686,16 @@ if (typeof module !== 'undefined' && require.main === module) {
 				let out_i = []
 				for (let i = 0; i < block.output_ports.length; i++) {
 					let ur = block.output_ports[i].update_rate
-					if (ur == lvl || (lvl == cond_level && ur <= lvl)) {
+					if (ur === lvl || (lvl === cond_level && ur <= lvl)) {
 						out_i.push(i)
 					}
 				}
-				if (out_i.length == 0)
+				if (out_i.length === 0)
 					continue
 
-				let stmts = program[levels[lvl]].filter(s => s.if_owners[s.if_owners.length - 1] && s.if_owners[s.if_owners.length - 1].ifblock == block)
-				let b0 = stmts.filter(s => s.if_owners[s.if_owners.length - 1].branch == 0)
-				let b1 = stmts.filter(s => s.if_owners[s.if_owners.length - 1].branch == 1)
+				let stmts = program[levels[lvl]].filter(s => s.if_owners[s.if_owners.length - 1] && s.if_owners[s.if_owners.length - 1].ifblock === block)
+				let b0 = stmts.filter(s => s.if_owners[s.if_owners.length - 1].branch === 0)
+				let b1 = stmts.filter(s => s.if_owners[s.if_owners.length - 1].branch === 1)
 
 				for (let i of out_i) {
 					b0.push(MagicString(
@@ -2576,7 +2728,7 @@ if (typeof module !== 'undefined' && require.main === module) {
 		}
 
 		function groupControls() {
-			var Group = function (set) {
+			const Group = function (set) {
 				let self = this
 				this.label = Array.from(set).join('_')
 				this.set = set
@@ -2587,30 +2739,31 @@ if (typeof module !== 'undefined' && require.main === module) {
 			let groups = []
 			program.controls_rate.forEach(function (stmt) {
 				let group = groups.find(g => g.equals(stmt.control_dependencies))
-				if (group == undefined) {
+				if (group === undefined) {
 					group = new Group(stmt.control_dependencies)
 					groups.push(group)
 				}
 				group.stmts.push(stmt)
 			})
 
-			groups.sort((A, B) => A.cardinality < B.cardinality ? -1 : A.cardinality == B.cardinality ? 0 : 1 )
+			groups.sort((a, b) => a.cardinality - b.cardinality)
 
 			program.controls_rate = groups
 		}
 	}
 
 	function checkSetsInclusion(A, B) { // if A is included in B
-		return Array.from(A).every(Av => Array.from(B).some(Bv => Av == Bv))
+		return Array.from(A).every(Av => Array.from(B).some(Bv => Av === Bv))
 	}
 	function checkSetEquality(A, B) {
 		return checkSetsInclusion(A, B) && checkSetsInclusion(B, A)
 	}
 
 
-	exports["convert"] = convert;
+	exports["convert"] = convert
 }())
-},{}],5:[function(require,module,exports){
+
+},{}],6:[function(require,module,exports){
 /*
 	Copyright (C) 2021, 2022 Orastron Srl
 
@@ -2627,13 +2780,14 @@ if (typeof module !== 'undefined' && require.main === module) {
 */
 
 (function() {
+	'use strict'
 
 	function schedule (graph) {
-		let scheduled_nodes = []
+		const scheduled_nodes = []
 
 		let roots = [].concat(graph.output_ports.map(p => p.block))
-		roots = roots.concat(graph.blocks.filter(b => b.operation == 'DELAY1_EXPR'))
-		let stack = []
+		roots = roots.concat(graph.blocks.filter(b => b.operation === 'DELAY1_EXPR'))
+		const stack = []
 
 		roots.forEach(b => schedule_block(b))
 
@@ -2642,7 +2796,7 @@ if (typeof module !== 'undefined' && require.main === module) {
 		return scheduled_nodes
 
 		function schedule_block(block) {
-			if (stack.some(b => block == b))
+			if (stack.some(b => block === b))
 				throw new Error("Found loop in scheduling at block: " + block + ". Stack: \n" + stack.join('\n'))
 
 			if (block.visited)
@@ -2652,7 +2806,7 @@ if (typeof module !== 'undefined' && require.main === module) {
 			stack.push(block)
 
 			graph.getInputBlocks(block).forEach(function (b) {
-				if (b.operation != 'DELAY1_EXPR')
+				if (b.operation !== 'DELAY1_EXPR')
 					schedule_block(b)
 			})
 			scheduled_nodes.push(block)
@@ -2661,10 +2815,10 @@ if (typeof module !== 'undefined' && require.main === module) {
 	}
 
 	function scheduleInit (graph) {
-		let scheduled_nodes = []
+		const scheduled_nodes = []
 
-		let roots = [].concat(graph.output_ports.map(p => p.block))
-		let stack = []
+		const roots = [].concat(graph.output_ports.map(p => p.block))
+		const stack = []
 
 		roots.forEach(b => schedule_block(b))
 
@@ -2673,8 +2827,8 @@ if (typeof module !== 'undefined' && require.main === module) {
 		return scheduled_nodes
 
 		function schedule_block(block) {
-			if (stack.some(b => block == b))
-				throw new Error("Found loop in tnit scheduling at block: " + block + ". Stack: \n" + stack.join('\n'))
+			if (stack.some(b => block === b))
+				throw new Error("Found loop in init scheduling at block: " + block + ". Stack: \n" + stack.join('\n'))
 
 			if (block.visited)
 				return
@@ -2695,7 +2849,8 @@ if (typeof module !== 'undefined' && require.main === module) {
 	exports["scheduleInit"] = scheduleInit
 
 }())
-},{}],6:[function(require,module,exports){
+
+},{}],7:[function(require,module,exports){
 (function (Buffer){(function (){
 /*
 	Copyright (C) 2021, 2022 Orastron Srl
@@ -2713,6 +2868,7 @@ if (typeof module !== 'undefined' && require.main === module) {
 */
 
 (function() {
+	'use strict'
 
 	function compile(env, debug, code, initial_block, control_inputs, initial_values, target_lang) {
 		if (!env) {
@@ -2735,183 +2891,38 @@ if (typeof module !== 'undefined' && require.main === module) {
 					"vst2_wrapper_h": 	String(Buffer("I2lmbmRlZiBfRUZGRUNUX0gKI2RlZmluZSBfRUZGRUNUX0gKCiNpbmNsdWRlICJhdWRpb2VmZmVjdHguaCIKI2luY2x1ZGUgInt7PWl0LmNsYXNzX25hbWV9fS5oIgoKY2xhc3MgRWZmZWN0IDogcHVibGljIEF1ZGlvRWZmZWN0WAp7CnB1YmxpYzoKCUVmZmVjdChhdWRpb01hc3RlckNhbGxiYWNrIGF1ZGlvTWFzdGVyKTsKCX5FZmZlY3QoKTsKCgl2aXJ0dWFsIHZvaWQgc2V0U2FtcGxlUmF0ZShmbG9hdCBzYW1wbGVSYXRlKTsKCXZpcnR1YWwgdm9pZCBwcm9jZXNzKGZsb2F0ICoqaW5wdXRzLCBmbG9hdCAqKm91dHB1dHMsIFZzdEludDMyIHNhbXBsZUZyYW1lcyk7Cgl2aXJ0dWFsIHZvaWQgcHJvY2Vzc1JlcGxhY2luZyhmbG9hdCAqKmlucHV0cywgZmxvYXQgKipvdXRwdXRzLCBWc3RJbnQzMiBzYW1wbGVGcmFtZXMpOwoJdmlydHVhbCB2b2lkIHNldFByb2dyYW1OYW1lKGNoYXIgKm5hbWUpOwoJdmlydHVhbCB2b2lkIGdldFByb2dyYW1OYW1lKGNoYXIgKm5hbWUpOwoJdmlydHVhbCBib29sIGdldFByb2dyYW1OYW1lSW5kZXhlZChWc3RJbnQzMiBjYXRlZ29yeSwgVnN0SW50MzIgaW5kZXgsIGNoYXIqIG5hbWUpOwoJdmlydHVhbCB2b2lkIHNldFBhcmFtZXRlcihWc3RJbnQzMiBpbmRleCwgZmxvYXQgdmFsdWUpOwoJdmlydHVhbCBmbG9hdCBnZXRQYXJhbWV0ZXIoVnN0SW50MzIgaW5kZXgpOwoJdmlydHVhbCB2b2lkIGdldFBhcmFtZXRlckxhYmVsKFZzdEludDMyIGluZGV4LCBjaGFyICpsYWJlbCk7Cgl2aXJ0dWFsIHZvaWQgZ2V0UGFyYW1ldGVyRGlzcGxheShWc3RJbnQzMiBpbmRleCwgY2hhciAqdGV4dCk7Cgl2aXJ0dWFsIHZvaWQgZ2V0UGFyYW1ldGVyTmFtZShWc3RJbnQzMiBpbmRleCwgY2hhciAqdGV4dCk7CgoJdmlydHVhbCBib29sIGdldEVmZmVjdE5hbWUoY2hhciAqbmFtZSk7Cgl2aXJ0dWFsIGJvb2wgZ2V0VmVuZG9yU3RyaW5nKGNoYXIgKnRleHQpOwoJdmlydHVhbCBib29sIGdldFByb2R1Y3RTdHJpbmcoY2hhciAqdGV4dCk7Cgl2aXJ0dWFsIFZzdEludDMyIGdldFZlbmRvclZlcnNpb24oKSB7IHJldHVybiAxMDAwOyB9Cgpwcml2YXRlOgoJY2hhciBwcm9ncmFtTmFtZVszMl07CgoJe3s9aXQuY2xhc3NfbmFtZX19IGluc3RhbmNlOwp9OwoKI2VuZGlmCg==","base64")),
 					"vst2_wrapper_cpp": String(Buffer("I2luY2x1ZGUgInt7PWl0LmNsYXNzX25hbWV9fV92c3QyX3dyYXBwZXIuaCIKCiNpbmNsdWRlIDxjc3RkbGliPgojaW5jbHVkZSA8Y3N0ZGlvPgojaW5jbHVkZSA8Y21hdGg+CiNpbmNsdWRlIDxhbGdvcml0aG0+CgpBdWRpb0VmZmVjdCAqY3JlYXRlRWZmZWN0SW5zdGFuY2UoYXVkaW9NYXN0ZXJDYWxsYmFjayBhdWRpb01hc3RlcikgeyByZXR1cm4gbmV3IEVmZmVjdChhdWRpb01hc3Rlcik7IH0KCkVmZmVjdDo6RWZmZWN0KGF1ZGlvTWFzdGVyQ2FsbGJhY2sgYXVkaW9NYXN0ZXIpIDogQXVkaW9FZmZlY3RYKGF1ZGlvTWFzdGVyLCAxLCB7ez1pdC5jb250cm9sX2lucHV0cy5sZW5ndGh9fSkgewoJc2V0TnVtSW5wdXRzKHt7PWl0LmF1ZGlvX2lucHV0cy5sZW5ndGh9fSk7CglzZXROdW1PdXRwdXRzKHt7PWl0Lm91dHB1dHMubGVuZ3RofX0pOwoJc2V0VW5pcXVlSUQoJ2Z4ZngnKTsKCURFQ0xBUkVfVlNUX0RFUFJFQ0FURUQoY2FuTW9ubykgKCk7CgljYW5Qcm9jZXNzUmVwbGFjaW5nKCk7CglzdHJjcHkocHJvZ3JhbU5hbWUsICJFZmZlY3QiKTsKCglpbnN0YW5jZSA9IHt7PWl0LmNsYXNzX25hbWV9fSgpOwp9CgpFZmZlY3Q6On5FZmZlY3QoKSB7fQoKYm9vbCBFZmZlY3Q6OmdldFByb2R1Y3RTdHJpbmcoY2hhciogdGV4dCkgeyBzdHJjcHkodGV4dCwgIkVmZmVjdCIpOyByZXR1cm4gdHJ1ZTsgfQpib29sIEVmZmVjdDo6Z2V0VmVuZG9yU3RyaW5nKGNoYXIqIHRleHQpIHsgc3RyY3B5KHRleHQsICJDaWFyYW1lbGxhIik7IHJldHVybiB0cnVlOyB9CmJvb2wgRWZmZWN0OjpnZXRFZmZlY3ROYW1lKGNoYXIqIG5hbWUpIHsgc3RyY3B5KG5hbWUsICJFZmZlY3QiKTsgcmV0dXJuIHRydWU7IH0KCnZvaWQgRWZmZWN0OjpzZXRQcm9ncmFtTmFtZShjaGFyICpuYW1lKSB7IHN0cmNweShwcm9ncmFtTmFtZSwgbmFtZSk7IH0Kdm9pZCBFZmZlY3Q6OmdldFByb2dyYW1OYW1lKGNoYXIgKm5hbWUpIHsgc3RyY3B5KG5hbWUsIHByb2dyYW1OYW1lKTsgfQoKYm9vbCBFZmZlY3Q6OmdldFByb2dyYW1OYW1lSW5kZXhlZChWc3RJbnQzMiBjYXRlZ29yeSwgVnN0SW50MzIgaW5kZXgsIGNoYXIqIG5hbWUpIHsKCWlmIChpbmRleCA9PSAwKSB7CgkJc3RyY3B5KG5hbWUsIHByb2dyYW1OYW1lKTsKCQlyZXR1cm4gdHJ1ZTsKCX0KCXJldHVybiBmYWxzZTsKfQoKdm9pZCBFZmZlY3Q6OnNldFBhcmFtZXRlcihWc3RJbnQzMiBpbmRleCwgZmxvYXQgdmFsdWUpIHsKCXN3aXRjaCAoaW5kZXgpIHsKCXt7fml0LmNvbnRyb2xfaW5wdXRzOmN9fQoJY2FzZSB7ez1pdC5jb250cm9sX2lucHV0cy5pbmRleE9mKGMpfX06CgkJaW5zdGFuY2Uuc2V0e3s9Y319KHZhbHVlKTsKCQlicmVhazt7e359fQoJfQp9CgpmbG9hdCBFZmZlY3Q6OmdldFBhcmFtZXRlcihWc3RJbnQzMiBpbmRleCkgewoJZmxvYXQgdiA9IDAuZjsKCXN3aXRjaCAoaW5kZXgpIHsKCXt7fml0LmNvbnRyb2xfaW5wdXRzOmN9fQoJY2FzZSB7ez1pdC5jb250cm9sX2lucHV0cy5pbmRleE9mKGMpfX06CgkJdiA9IGluc3RhbmNlLmdldHt7PWN9fSgpOwoJCWJyZWFrO3t7fn19Cgl9CglyZXR1cm4gdjsKfQoKdm9pZCBFZmZlY3Q6OmdldFBhcmFtZXRlck5hbWUoVnN0SW50MzIgaW5kZXgsIGNoYXIgKnRleHQpIHsKCWNvbnN0IGNoYXIgKm5hbWVzW10gPSB7IHt7PWl0LmNvbnRyb2xfaW5wdXRzLm1hcChjID0+ICdcIicgK2MrJ1wiJyl9fX07CglzdHJjcHkodGV4dCwgbmFtZXNbaW5kZXhdKTsKfQoKdm9pZCBFZmZlY3Q6OmdldFBhcmFtZXRlckRpc3BsYXkoVnN0SW50MzIgaW5kZXgsIGNoYXIgKnRleHQpIHsKCXRleHRbMF0gPSAnXDAnOwp9Cgp2b2lkIEVmZmVjdDo6Z2V0UGFyYW1ldGVyTGFiZWwoVnN0SW50MzIgaW5kZXgsIGNoYXIgKnRleHQpICB7Cgl0ZXh0WzBdID0gJ1wwJzsKfQoKdm9pZCBFZmZlY3Q6OnNldFNhbXBsZVJhdGUoZmxvYXQgc2FtcGxlUmF0ZSkgewoJaW5zdGFuY2Uuc2V0U2FtcGxlUmF0ZShzYW1wbGVSYXRlKTsKCWluc3RhbmNlLnJlc2V0KCk7Cn0KCnZvaWQgRWZmZWN0Ojpwcm9jZXNzKGZsb2F0ICoqaW5wdXRzLCBmbG9hdCAqKm91dHB1dHMsIFZzdEludDMyIHNhbXBsZUZyYW1lcykgewoJaW5zdGFuY2UucHJvY2Vzcyh7ez1pdC5hdWRpb19pbnB1dHMubWFwKGkgPT4gJ2lucHV0c1snK2l0LmF1ZGlvX2lucHV0cy5pbmRleE9mKGkpKyddJyl9fSwge3s9aXQub3V0cHV0cy5tYXAoaSA9PiAnb3V0cHV0c1snK2l0Lm91dHB1dHMuaW5kZXhPZihpKSsnXScpfX0sIHNhbXBsZUZyYW1lcyk7Cn0KCnZvaWQgRWZmZWN0Ojpwcm9jZXNzUmVwbGFjaW5nKGZsb2F0ICoqaW5wdXRzLCBmbG9hdCAqKm91dHB1dHMsIFZzdEludDMyIHNhbXBsZUZyYW1lcykgewoJaW5zdGFuY2UucHJvY2Vzcyh7ez1pdC5hdWRpb19pbnB1dHMubWFwKGkgPT4gJ2lucHV0c1snK2l0LmF1ZGlvX2lucHV0cy5pbmRleE9mKGkpKyddJyl9fSwge3s9aXQub3V0cHV0cy5tYXAoaSA9PiAnb3V0cHV0c1snK2l0Lm91dHB1dHMuaW5kZXhPZihpKSsnXScpfX0sIHNhbXBsZUZyYW1lcyk7Cn0K","base64")),
 					"yaaaeapa_wrapper_c": String(Buffer("I2luY2x1ZGUgInt7PWl0LmNsYXNzX25hbWV9fS5oIgoKLy8gSW1wbGVtZW50aW5nIHRoZSB5YWFhZWFwYSBpbnRlcmZhY2UKCnt7PWl0LmNsYXNzX25hbWV9fSBpbnN0YW5jZTsKCnZvaWQgeWFhYWVhcGFfaW5pdCh2b2lkKSB7Cgl7ez1pdC5jbGFzc19uYW1lfX1faW5pdCgmaW5zdGFuY2UpOwp9CnZvaWQgeWFhYWVhcGFfZmluaSh2b2lkKSB7Cn0Kdm9pZCB5YWFhZWFwYV9zZXRfc2FtcGxlX3JhdGUoZmxvYXQgc2FtcGxlX3JhdGUpIHsKCXt7PWl0LmNsYXNzX25hbWV9fV9zZXRfc2FtcGxlX3JhdGUoJmluc3RhbmNlLCBzYW1wbGVfcmF0ZSk7Cn0Kdm9pZCB5YWFhZWFwYV9yZXNldCh2b2lkKSB7Cgl7ez1pdC5jbGFzc19uYW1lfX1fcmVzZXQoJmluc3RhbmNlKTsKfQp2b2lkIHlhYWFlYXBhX3Byb2Nlc3MoY29uc3QgZmxvYXQqKiB4LCBmbG9hdCoqIHksIGludCBuX3NhbXBsZXMpIHsKCXt7PWl0LmNsYXNzX25hbWV9fV9wcm9jZXNzKCZpbnN0YW5jZSwge3t+aXQuYXVkaW9faW5wdXRzOmE6aX19eFt7ez1pfX1dLCB7e359fXt7fml0Lm91dHB1dHM6bzppfX15W3t7PWl9fV0sIHt7fn19IG5fc2FtcGxlcyk7Cn0Kdm9pZCB5YWFhZWFwYV9zZXRfcGFyYW1ldGVyKGludCBpbmRleCwgZmxvYXQgdmFsdWUpIHsKCXt7PWl0LmNsYXNzX25hbWV9fV9zZXRfcGFyYW1ldGVyKCZpbnN0YW5jZSwgaW5kZXgsIHZhbHVlKTsKfQpmbG9hdCB5YWFhZWFwYV9nZXRfcGFyYW1ldGVyKGludCBpbmRleCkgewoJcmV0dXJuIHt7PWl0LmNsYXNzX25hbWV9fV9nZXRfcGFyYW1ldGVyKCZpbnN0YW5jZSwgaW5kZXgpOwp9CnZvaWQgeWFhYWVhcGFfbm90ZV9vbihjaGFyIG5vdGUsIGNoYXIgdmVsb2NpdHkpIHsKCSh2b2lkKW5vdGU7Cgkodm9pZCl2ZWxvY2l0eTsKfQp2b2lkIHlhYWFlYXBhX25vdGVfb2ZmKGNoYXIgbm90ZSkgewoJKHZvaWQpbm90ZTsKfQp2b2lkIHlhYWFlYXBhX3BpdGNoX2JlbmQoaW50IGJlbmQpIHsKCSh2b2lkKWJlbmQ7Cn0Kdm9pZCB5YWFhZWFwYV9tb2Rfd2hlZWwoY2hhciB3aGVlbCkgewoJKHZvaWQpd2hlZWw7Cn0KCmludCB5YWFhZWFwYV9wYXJhbWV0ZXJzX24gCT0ge3s9aXQuY29udHJvbF9pbnB1dHMubGVuZ3RofX07CmludCB5YWFhZWFwYV9idXNlc19pbl9uIAk9IDE7CmludCB5YWFhZWFwYV9idXNlc19vdXRfbiAJPSAxOwppbnQgeWFhYWVhcGFfY2hhbm5lbHNfaW5fbiAJPSB7ez1pdC5hdWRpb19pbnB1dHMubGVuZ3RofX07CmludCB5YWFhZWFwYV9jaGFubmVsc19vdXRfbgk9IHt7PWl0Lm91dHB1dHMubGVuZ3RofX07Ci8vdm9pZCogeWFhYWVhcGFfZGF0YSAJCT0gTlVMTDsKCnZvaWQgeWFhYWVhcGFfZ2V0X3BhcmFtZXRlcl9pbmZvIChpbnQgaW5kZXgsIGNoYXIqKiBuYW1lLCBjaGFyKiogc2hvcnROYW1lLCBjaGFyKiogdW5pdHMsIGNoYXIqIG91dCwgY2hhciogYnlwYXNzLCBpbnQqIHN0ZXBzLCBmbG9hdCogZGVmYXVsdFZhbHVlVW5tYXBwZWQpIHsKCWlmIChpbmRleCA8IDAgfHwgaW5kZXggPj0ge3s9aXQuY29udHJvbF9pbnB1dHMubGVuZ3RofX0pIHJldHVybjsKCXN3aXRjaCAoaW5kZXgpIHsKCXt7fml0LmNvbnRyb2xfaW5wdXRzOmM6aX19CgkJY2FzZSB7ez1pfX06CgkJCWlmIChuYW1lKSAqbmFtZSA9IChjaGFyKikgInt7PWN9fSI7CgkJCWlmIChzaG9ydE5hbWUpICpzaG9ydE5hbWUgPSAoY2hhciopICJ7ez1jfX0iOwoJCQlpZiAodW5pdHMpICp1bml0cyA9IChjaGFyKikgIiI7CgkJCWlmIChvdXQpICpvdXQgPSAwOwoJCQlpZiAoYnlwYXNzKSAqYnlwYXNzID0gMDsKCQkJaWYgKHN0ZXBzKSAqc3RlcHMgPSAwOwoJCQlpZiAoZGVmYXVsdFZhbHVlVW5tYXBwZWQpICpkZWZhdWx0VmFsdWVVbm1hcHBlZCA9IDAuZjsgLy8gRml4CgkJCWJyZWFrOwoJe3t+fX0KCX0KfQo=","base64")),
-					"js_html": 			String(Buffer("PCFET0NUWVBFIGh0bWw+CjxodG1sPgo8aGVhZD4KPHRpdGxlPlBsdWdpbjwvdGl0bGU+CjxzY3JpcHQgdHlwZT0idGV4dC9qYXZhc2NyaXB0Ij4KCnZhciBub2RlOwp2YXIgY3R4Owp2YXIgaW5wdXROb2RlOwoKdmFyIGJlZ2luID0gYXN5bmMgZnVuY3Rpb24gKCkgewoJY3R4ID0gbmV3IEF1ZGlvQ29udGV4dCgpOwoKCWF3YWl0IGN0eC5hdWRpb1dvcmtsZXQuYWRkTW9kdWxlKCJwcm9jZXNzb3IuanMiKTsKCglub2RlID0gbmV3IEF1ZGlvV29ya2xldE5vZGUoY3R4LCAiUGx1Z2luUHJvY2Vzc29yIiwgeyBudW1iZXJPZklucHV0czoxLCAgbnVtYmVyT2ZPdXRwdXRzOjEsIG91dHB1dENoYW5uZWxDb3VudDogW3t7PWl0Lm91dHB1dHMubGVuZ3RofX1dIH0pOwoKCW5vZGUuY29ubmVjdChjdHguZGVzdGluYXRpb24pOwoKCXZhciBzdHJlYW0gPSBhd2FpdCBuYXZpZ2F0b3IubWVkaWFEZXZpY2VzLmdldFVzZXJNZWRpYSh7IGF1ZGlvOiB7IGF1dG9HYWluQ29udHJvbDogZmFsc2UsIGVjaG9DYW5jZWxsYXRpb246IGZhbHNlLCBub2lzZVN1cHByZXNzaW9uOiBmYWxzZSwgbGF0ZW5jeTogMC4wMDUgfSB9KTsKCWlucHV0Tm9kZSA9IGN0eC5jcmVhdGVNZWRpYVN0cmVhbVNvdXJjZShzdHJlYW0pOwoKCWlucHV0Tm9kZS5jb25uZWN0KG5vZGUpOwoKICB7e35pdC5jb250cm9sX2lucHV0czpjfX0KICBkb2N1bWVudC5nZXRFbGVtZW50QnlJZCgie3s9Y319Iikub25pbnB1dCA9IGhhbmRsZUlucHV0OyB7e359fQogIAp9OwoKZnVuY3Rpb24gaGFuZGxlSW5wdXQoZSkgewoJbm9kZS5wb3J0LnBvc3RNZXNzYWdlKHt0eXBlOiAicGFyYW1DaGFuZ2UiLCBpZDogZS50YXJnZXQuaWQsIHZhbHVlOiBlLnRhcmdldC52YWx1ZX0pCn07Cjwvc2NyaXB0Pgo8L2hlYWQ+Cjxib2R5PgogIDxoMT57ez1pdC5jbGFzc19uYW1lfX08L2gxPgogIAogIHt7fml0LmNvbnRyb2xfaW5wdXRzOmN9fQogIDxsYWJlbCBmb3I9Int7PWN9fSI+e3s9Y319PC9sYWJlbD4KICA8aW5wdXQgdHlwZT0icmFuZ2UiIGlkPSJ7ez1jfX0iIG5hbWU9Int7PWN9fSIgbWluPSIwIiBtYXg9IjEiIHZhbHVlPSIwLjUiIHN0ZXA9ImFueSI+PGJyPnt7fn19CgogIDxidXR0b24gb25jbGljaz0iYmVnaW4oKSI+U3RhcnQ8L2J1dHRvbj4KPC9ib2R5Pgo8L2h0bWw+Cg==","base64")),
-					"js_processor": 	String(Buffer("e3t+aXQuY29uc3RhbnRfcmF0ZTpjfX1jb25zdCB7ez1jfX07Cnt7fn19Cgp2YXIgUGx1Z2luID0gewoJaW5pdDogZnVuY3Rpb24gKCkgewoJCXRoaXMuZnMgPSAwOwoJCXRoaXMuZmlyc3RSdW4gPSAxOwoKCQl0aGlzLnBhcmFtcyA9IFt7ez1pdC5jb250cm9sX2lucHV0cy5tYXAoYyA9PiAnIicgKyBjICsgJyInKS5qb2luKCIsICIpfX1dOwoKCQl7e35pdC5pbml0OmR9fQoJCXt7PWR9fTt7e359fQoKCQl7e35pdC5jb250cm9sX2lucHV0czpjfX0KCQl0aGlzLnt7PWN9fV96MSA9IDA7CgkJdGhpcy57ez1jfX1fQ0hBTkdFRCA9IHRydWU7CgkJe3t+fX0KCX0sCgoJcmVzZXQ6IGZ1bmN0aW9uICgpIHsKCQl0aGlzLmZpcnN0UnVuID0gMQoJfSwKCglzZXRTYW1wbGVSYXRlOiBmdW5jdGlvbiAoc2FtcGxlUmF0ZSkgewoJCXRoaXMuZnMgPSBzYW1wbGVSYXRlOwoJCXt7fml0LnNhbXBsaW5nX3JhdGU6c319e3s9c319OwoJCXt7fn19Cgl9LAoKCXByb2Nlc3M6IGZ1bmN0aW9uICh7ez1pdC5hdWRpb19pbnB1dHMuY29uY2F0KGl0Lm91dHB1dHMpLmpvaW4oJywgJyl9fSwgblNhbXBsZXMpIHsKCQlpZiAodGhpcy5maXJzdFJ1bikge3t7fml0LmNvbnRyb2xfaW5wdXRzOmN9fQoJCQl0aGlzLnt7PWN9fV9DSEFOR0VEID0gdHJ1ZTt7e359fQoJCX0KCQllbHNlIHt7e35pdC5jb250cm9sX2lucHV0czpjfX0KCQkJdGhpcy57ez1jfX1fQ0hBTkdFRCA9IHRoaXMue3s9Y319ICE9IHRoaXMue3s9Y319X3oxO3t7fn19CgkJfQoKCQl7e35pdC5jb250cm9sc19yYXRlOmN9fQoJCWlmICh7ez1BcnJheS5mcm9tKGMuc2V0KS5tYXAoZSA9PiAidGhpcy4iICsgZSArICJfQ0hBTkdFRCIpLmpvaW4oJyB8ICcpfX0pIHt7e35jLnN0bXRzOiBzfX0KCQkJe3s9c319O3t7fn19CgkJfXt7fn19CgkJe3t+aXQuY29udHJvbF9pbnB1dHM6Y319CgkJdGhpcy57ez1jfX1fQ0hBTkdFRCA9IGZhbHNlO3t7fn19CgoJCWlmICh0aGlzLmZpcnN0UnVuKSB7IHt7fml0LnJlc2V0MTpyfX0KCQkJe3s9cn19O3t7fn19CgkJCXt7fml0LnJlc2V0MjpyfX0KCQkJe3s9cn19O3t7fn19CgkJfQoKCQlmb3IgKGxldCBpID0gMDsgaSA8IG5TYW1wbGVzOyBpKyspIHsKCQkJe3t+aXQuYXVkaW9fcmF0ZTogYX19CgkJCXt7PWF9fTt7e359fQoJCQkKCQkJe3t+aXQuZGVsYXlfdXBkYXRlczp1fX17ez11fX07CgkJCXt7fn19CgkJCXt7fml0Lm91dHB1dF91cGRhdGVzOnV9fQoJCQl7ez11fX07e3t+fX0KCQl9CgoJCXt7fml0LmNvbnRyb2xfaW5wdXRzOmN9fQoJCXRoaXMue3s9Y319X3oxID0gdGhpcy57ez1jfX07e3t+fX0KCQl0aGlzLmZpcnN0UnVuID0gMDsKCX0KfQoKLy8gU3RhdGljIHBhcnQKY2xhc3MgUGx1Z2luUHJvY2Vzc29yIGV4dGVuZHMgQXVkaW9Xb3JrbGV0UHJvY2Vzc29yIHsKCWNvbnN0cnVjdG9yICgpIHsKCgkJc3VwZXIoKTsKCQl0aGlzLmluc3RhbmNlID0gT2JqZWN0LmNyZWF0ZShQbHVnaW4pOwoJCXRoaXMuaW5zdGFuY2UuaW5pdCgpOwoJCXRoaXMuaW5zdGFuY2Uuc2V0U2FtcGxlUmF0ZShzYW1wbGVSYXRlKTsKCQl0aGlzLmluc3RhbmNlLnJlc2V0KCk7CgoJCXRoaXMucG9ydC5vbm1lc3NhZ2UgPSAoZSkgPT4gewoJCQlpZiAoZS5kYXRhLnR5cGUgPT0gImNoYW5nZUluc3RhbmNlIikgewoJCQkJZXZhbChlLmRhdGEudmFsdWUpCgkJCQl0aGlzLmluc3RhbmNlID0gT2JqZWN0LmNyZWF0ZShQbHVnaW4pOwoJCQkJdGhpcy5pbnN0YW5jZS5pbml0KCk7CgkJCQl0aGlzLmluc3RhbmNlLnNldFNhbXBsZVJhdGUoc2FtcGxlUmF0ZSk7CgkJCQl0aGlzLmluc3RhbmNlLnJlc2V0KCk7CgkJCX0KCQkJZWxzZSBpZiAoZS5kYXRhLnR5cGUgPT0gInBhcmFtQ2hhbmdlIikgewoJCQkJdGhpcy5pbnN0YW5jZVtlLmRhdGEuaWRdID0gZS5kYXRhLnZhbHVlCgkJCX0KCQl9Cgl9Cglwcm9jZXNzIChpbnB1dHMsIG91dHB1dHMsIHBhcmFtZXRlcnMpIHsKCgkJdmFyIGlucHV0ID0gaW5wdXRzWzBdOwoJCXZhciBvdXRwdXQgPSBvdXRwdXRzWzBdOwoJCWxldCBuU2FtcGxlcyA9IE1hdGgubWluKGlucHV0Lmxlbmd0aCA+PSAxID8gaW5wdXRbMF0ubGVuZ3RoIDogMCwgb3V0cHV0WzBdLmxlbmd0aCkKCQkKCgoJCXRoaXMuaW5zdGFuY2UucHJvY2Vzcyh7ez1pdC5hdWRpb19pbnB1dHMubWFwKChpaSwgaSkgPT4gImlucHV0WyIgKyBpICsgIl0iKX19e3s/aXQuYXVkaW9faW5wdXRzLmxlbmd0aCA+IDB9fSwge3s/fX0ge3s9aXQub3V0cHV0cy5tYXAoKGlpLCBpKSA9PiAib3V0cHV0WyIgKyBpICsgIl0iKX19LCBuU2FtcGxlcyk7CgoJCXJldHVybiB0cnVlOwoJfQoKCXN0YXRpYyBnZXQgcGFyYW1ldGVyRGVzY3JpcHRvcnMoKSB7CgkJcmV0dXJuIFtdOwoJfQp9CgpyZWdpc3RlclByb2Nlc3NvcigiUGx1Z2luUHJvY2Vzc29yIiwgUGx1Z2luUHJvY2Vzc29yKTsK","base64")),
+					"js_html": 			String(Buffer("PCFET0NUWVBFIGh0bWw+CjxodG1sPgo8aGVhZD4KPHRpdGxlPlBsdWdpbjwvdGl0bGU+CjxzY3JpcHQgdHlwZT0idGV4dC9qYXZhc2NyaXB0Ij4KCmxldCBub2RlOwpsZXQgY3R4OwpsZXQgaW5wdXROb2RlOwoKY29uc3QgYmVnaW4gPSBhc3luYyBmdW5jdGlvbiAoKSB7CgljdHggPSBuZXcgQXVkaW9Db250ZXh0KCk7CgoJYXdhaXQgY3R4LmF1ZGlvV29ya2xldC5hZGRNb2R1bGUoInByb2Nlc3Nvci5qcyIpOwoKCW5vZGUgPSBuZXcgQXVkaW9Xb3JrbGV0Tm9kZShjdHgsICJQbHVnaW5Qcm9jZXNzb3IiLCB7IG51bWJlck9mSW5wdXRzOjEsICBudW1iZXJPZk91dHB1dHM6MSwgb3V0cHV0Q2hhbm5lbENvdW50OiBbe3s9aXQub3V0cHV0cy5sZW5ndGh9fV0gfSk7CgoJbm9kZS5jb25uZWN0KGN0eC5kZXN0aW5hdGlvbik7CgoJY29uc3Qgc3RyZWFtID0gYXdhaXQgbmF2aWdhdG9yLm1lZGlhRGV2aWNlcy5nZXRVc2VyTWVkaWEoeyBhdWRpbzogeyBhdXRvR2FpbkNvbnRyb2w6IGZhbHNlLCBlY2hvQ2FuY2VsbGF0aW9uOiBmYWxzZSwgbm9pc2VTdXBwcmVzc2lvbjogZmFsc2UsIGxhdGVuY3k6IDAuMDA1IH0gfSk7CglpbnB1dE5vZGUgPSBjdHguY3JlYXRlTWVkaWFTdHJlYW1Tb3VyY2Uoc3RyZWFtKTsKCglpbnB1dE5vZGUuY29ubmVjdChub2RlKTsKCiAge3t+aXQuY29udHJvbF9pbnB1dHM6Y319CiAgZG9jdW1lbnQuZ2V0RWxlbWVudEJ5SWQoInt7PWN9fSIpLm9uaW5wdXQgPSBoYW5kbGVJbnB1dDsge3t+fX0KICAKfQoKZnVuY3Rpb24gaGFuZGxlSW5wdXQoZSkgewoJbm9kZS5wb3J0LnBvc3RNZXNzYWdlKHt0eXBlOiAicGFyYW1DaGFuZ2UiLCBpZDogZS50YXJnZXQuaWQsIHZhbHVlOiBlLnRhcmdldC52YWx1ZX0pCn0KPC9zY3JpcHQ+CjwvaGVhZD4KPGJvZHk+CiAgPGgxPnt7PWl0LmNsYXNzX25hbWV9fTwvaDE+CiAgCiAge3t+aXQuY29udHJvbF9pbnB1dHM6Y319CiAgPGxhYmVsIGZvcj0ie3s9Y319Ij57ez1jfX08L2xhYmVsPgogIDxpbnB1dCB0eXBlPSJyYW5nZSIgaWQ9Int7PWN9fSIgbmFtZT0ie3s9Y319IiBtaW49IjAiIG1heD0iMSIgdmFsdWU9IjAuNSIgc3RlcD0iYW55Ij48YnI+e3t+fX0KCiAgPGJ1dHRvbiBvbmNsaWNrPSJiZWdpbigpIj5TdGFydDwvYnV0dG9uPgo8L2JvZHk+CjwvaHRtbD4K","base64")),
+					"js_processor": 	String(Buffer("e3t+aXQuY29uc3RhbnRfcmF0ZTpjfX1jb25zdCB7ez1jfX07Cnt7fn19Cgpjb25zdCBQbHVnaW4gPSB7Cglpbml0OiBmdW5jdGlvbiAoKSB7CgkJdGhpcy5mcyA9IDA7CgkJdGhpcy5maXJzdFJ1biA9IDE7CgoJCXRoaXMucGFyYW1zID0gW3t7PWl0LmNvbnRyb2xfaW5wdXRzLm1hcChjID0+ICciJyArIGMgKyAnIicpLmpvaW4oIiwgIil9fV07CgoJCXt7fml0LmluaXQ6ZH19CgkJe3s9ZH19O3t7fn19CgoJCXt7fml0LmNvbnRyb2xfaW5wdXRzOmN9fQoJCXRoaXMue3s9Y319X3oxID0gMDsKCQl0aGlzLnt7PWN9fV9DSEFOR0VEID0gdHJ1ZTsKCQl7e359fQoJfSwKCglyZXNldDogZnVuY3Rpb24gKCkgewoJCXRoaXMuZmlyc3RSdW4gPSAxCgl9LAoKCXNldFNhbXBsZVJhdGU6IGZ1bmN0aW9uIChzYW1wbGVSYXRlKSB7CgkJdGhpcy5mcyA9IHNhbXBsZVJhdGU7CgkJe3t+aXQuc2FtcGxpbmdfcmF0ZTpzfX17ez1zfX07CgkJe3t+fX0KCX0sCgoJcHJvY2VzczogZnVuY3Rpb24gKHt7PWl0LmF1ZGlvX2lucHV0cy5jb25jYXQoaXQub3V0cHV0cykuam9pbignLCAnKX19LCBuU2FtcGxlcykgewoJCWlmICh0aGlzLmZpcnN0UnVuKSB7e3t+aXQuY29udHJvbF9pbnB1dHM6Y319CgkJCXRoaXMue3s9Y319X0NIQU5HRUQgPSB0cnVlO3t7fn19CgkJfQoJCWVsc2Uge3t7fml0LmNvbnRyb2xfaW5wdXRzOmN9fQoJCQl0aGlzLnt7PWN9fV9DSEFOR0VEID0gdGhpcy57ez1jfX0gIT09IHRoaXMue3s9Y319X3oxO3t7fn19CgkJfQoKCQl7e35pdC5jb250cm9sc19yYXRlOmN9fQoJCWlmICh7ez1BcnJheS5mcm9tKGMuc2V0KS5tYXAoZSA9PiAidGhpcy4iICsgZSArICJfQ0hBTkdFRCIpLmpvaW4oJyB8ICcpfX0pIHt7e35jLnN0bXRzOiBzfX0KCQkJe3s9c319O3t7fn19CgkJfXt7fn19CgkJe3t+aXQuY29udHJvbF9pbnB1dHM6Y319CgkJdGhpcy57ez1jfX1fQ0hBTkdFRCA9IGZhbHNlO3t7fn19CgoJCWlmICh0aGlzLmZpcnN0UnVuKSB7IHt7fml0LnJlc2V0MTpyfX0KCQkJe3s9cn19O3t7fn19CgkJCXt7fml0LnJlc2V0MjpyfX0KCQkJe3s9cn19O3t7fn19CgkJfQoKCQlmb3IgKGxldCBpID0gMDsgaSA8IG5TYW1wbGVzOyBpKyspIHsKCQkJe3t+aXQuYXVkaW9fcmF0ZTogYX19CgkJCXt7PWF9fTt7e359fQoJCQkKCQkJe3t+aXQuZGVsYXlfdXBkYXRlczp1fX17ez11fX07CgkJCXt7fn19CgkJCXt7fml0Lm91dHB1dF91cGRhdGVzOnV9fQoJCQl7ez11fX07e3t+fX0KCQl9CgoJCXt7fml0LmNvbnRyb2xfaW5wdXRzOmN9fQoJCXRoaXMue3s9Y319X3oxID0gdGhpcy57ez1jfX07e3t+fX0KCQl0aGlzLmZpcnN0UnVuID0gMDsKCX0KfQoKLy8gU3RhdGljIHBhcnQKY2xhc3MgUGx1Z2luUHJvY2Vzc29yIGV4dGVuZHMgQXVkaW9Xb3JrbGV0UHJvY2Vzc29yIHsKCWNvbnN0cnVjdG9yICgpIHsKCgkJc3VwZXIoKTsKCQl0aGlzLmluc3RhbmNlID0gT2JqZWN0LmNyZWF0ZShQbHVnaW4pOwoJCXRoaXMuaW5zdGFuY2UuaW5pdCgpOwoJCXRoaXMuaW5zdGFuY2Uuc2V0U2FtcGxlUmF0ZShzYW1wbGVSYXRlKTsKCQl0aGlzLmluc3RhbmNlLnJlc2V0KCk7CgoJCXRoaXMucG9ydC5vbm1lc3NhZ2UgPSAoZSkgPT4gewoJCQlpZiAoZS5kYXRhLnR5cGUgPT09ICJjaGFuZ2VJbnN0YW5jZSIpIHsKCQkJCWV2YWwoZS5kYXRhLnZhbHVlKQoJCQkJdGhpcy5pbnN0YW5jZSA9IE9iamVjdC5jcmVhdGUoUGx1Z2luKTsKCQkJCXRoaXMuaW5zdGFuY2UuaW5pdCgpOwoJCQkJdGhpcy5pbnN0YW5jZS5zZXRTYW1wbGVSYXRlKHNhbXBsZVJhdGUpOwoJCQkJdGhpcy5pbnN0YW5jZS5yZXNldCgpOwoJCQl9CgkJCWVsc2UgaWYgKGUuZGF0YS50eXBlID09PSAicGFyYW1DaGFuZ2UiKSB7CgkJCQl0aGlzLmluc3RhbmNlW2UuZGF0YS5pZF0gPSBlLmRhdGEudmFsdWUKCQkJfQoJCX0KCX0KCXByb2Nlc3MgKGlucHV0cywgb3V0cHV0cywgcGFyYW1ldGVycykgewoKCQljb25zdCBpbnB1dCA9IGlucHV0c1swXTsKCQljb25zdCBvdXRwdXQgPSBvdXRwdXRzWzBdOwoJCWxldCBuU2FtcGxlcyA9IE1hdGgubWluKGlucHV0Lmxlbmd0aCA+PSAxID8gaW5wdXRbMF0ubGVuZ3RoIDogMCwgb3V0cHV0WzBdLmxlbmd0aCkKCQkKCgoJCXRoaXMuaW5zdGFuY2UucHJvY2Vzcyh7ez1pdC5hdWRpb19pbnB1dHMubWFwKChpaSwgaSkgPT4gImlucHV0WyIgKyBpICsgIl0iKX19e3s/aXQuYXVkaW9faW5wdXRzLmxlbmd0aCA+IDB9fSwge3s/fX0ge3s9aXQub3V0cHV0cy5tYXAoKGlpLCBpKSA9PiAib3V0cHV0WyIgKyBpICsgIl0iKX19LCBuU2FtcGxlcyk7CgoJCXJldHVybiB0cnVlOwoJfQoKCXN0YXRpYyBnZXQgcGFyYW1ldGVyRGVzY3JpcHRvcnMoKSB7CgkJcmV0dXJuIFtdOwoJfQp9CgpyZWdpc3RlclByb2Nlc3NvcigiUGx1Z2luUHJvY2Vzc29yIiwgUGx1Z2luUHJvY2Vzc29yKTsK","base64")),
 					"d_processor":		String(Buffer("c3RydWN0IHt7PWl0LmNsYXNzX25hbWV9fQp7Cm5vdGhyb3c6CnB1YmxpYzoKQG5vZ2M6CgogICAge3t+aXQuY29uc3RhbnRfcmF0ZTpjfX1lbnVtIGZsb2F0IHt7PWN9fTsKICAgIHt7fn19CgogICAgdm9pZCBzZXRTYW1wbGVSYXRlKGZsb2F0IHNhbXBsZVJhdGUpCiAgICB7CiAgICAgICAgZnMgPSBzYW1wbGVSYXRlOwogICAgICAgIHt7fml0LnNhbXBsaW5nX3JhdGU6c319e3s9c319OwogICAgICAgIHt7fn19CiAgICB9CgogICAgdm9pZCByZXNldCgpCiAgICB7CiAgICAgICAgZmlyc3RSdW4gPSAxOwogICAgfQoKICAgIHZvaWQgcHJvY2Vzcyh7ez1pdC5hdWRpb19pbnB1dHMuY29uY2F0KGl0Lm91dHB1dHMpLm1hcCh4ID0+ICdmbG9hdCAqJyArIHgpLmpvaW4oJywgJyl9fSwgaW50IG5TYW1wbGVzKQogICAgewogICAgICAgIGlmIChmaXJzdFJ1bikgCiAgICAgICAgewogICAgICAgICAgICB7e35pdC5jb250cm9sX2lucHV0czpjfX17ez1jfX1fQ0hBTkdFRCA9IDE7CiAgICAgICAgICAgIHt7fn19CiAgICAgICAgfQogICAgICAgIGVsc2Uge3t7fml0LmNvbnRyb2xfaW5wdXRzOmN9fQogICAgICAgICAgICB7ez1jfX1fQ0hBTkdFRCA9IHt7PWN9fSAhPSB7ez1jfX1fejE7e3t+fX0KICAgICAgICB9CiAgICAgICAge3t+aXQuY29udHJvbHNfcmF0ZTpjfX0KICAgICAgICBpZiAoe3s9QXJyYXkuZnJvbShjLnNldCkubWFwKGUgPT4gZSArICJfQ0hBTkdFRCIpLmpvaW4oJyB8ICcpfX0pIHt7e35jLnN0bXRzOiBzfX0KICAgICAgICAgICAge3s9c319O3t7fn19CiAgICAgICAgfXt7fn19CiAgICAgICAge3t+aXQuY29udHJvbF9pbnB1dHM6Y319CiAgICAgICAge3s9Y319X0NIQU5HRUQgPSAwO3t7fn19CgogICAgICAgIGlmIChmaXJzdFJ1bikge3t7fml0LnJlc2V0MTpyfX0KICAgICAgICAgICAge3s9cn19O3t7fn19CiAgICAgICAgICAgIHt7fml0LnJlc2V0MjpyfX0KICAgICAgICAgICAge3s9cn19O3t7fn19CiAgICAgICAgfQoKICAgICAgICBmb3IgKGludCBpID0gMDsgaSA8IG5TYW1wbGVzOyBpKyspIHsKICAgICAgICAgICAge3t+aXQuYXVkaW9fcmF0ZTogYX19CiAgICAgICAgICAgIHt7PWF9fTt7e359fQoKICAgICAgICAgICAge3t+aXQuZGVsYXlfdXBkYXRlczp1fX17ez11fX07CiAgICAgICAgICAgIHt7fn19CiAgICAgICAgICAgIHt7fml0Lm91dHB1dF91cGRhdGVzOnV9fQogICAgICAgICAgICB7ez11fX07e3t+fX0KICAgICAgICB9CgogICAgICAgIHt7fml0LmNvbnRyb2xfaW5wdXRzOmN9fQogICAgICAgIHt7PWN9fV96MSA9IHt7PWN9fTt7e359fQogICAgICAgIGZpcnN0UnVuID0gMDsKICAgIH0KCiAgICB7e35pdC5jb250cm9sX2lucHV0czpjfX0KICAgIGZsb2F0IGdldHt7PWN9fSgpCiAgICB7CiAgICAgICAgcmV0dXJuIHt7PWN9fTsKICAgIH0KICAgIHZvaWQgc2V0e3s9Y319KGZsb2F0IHZhbHVlKQogICAgewogICAgICAgIHt7PWN9fSA9IHZhbHVlOwogICAgfQogICAge3t+fX0KCnByaXZhdGU6CgogICAge3t+aXQuaW5pdDpkfX0KICAgIGZsb2F0IHt7PWR9fTt7e359fQoKICAgIHt7fml0LmNvbnRyb2xfaW5wdXRzOmN9fQogICAgZmxvYXQge3s9Y319X3oxOwogICAgY2hhciB7ez1jfX1fQ0hBTkdFRDsKICAgIHt7fn19CgogICAgZmxvYXQgZnM7CiAgICBpbnQgZmlyc3RSdW47Cgp9Owo=","base64"))
 				}
 			}
 		}
 
-		let tree = env["parser"].parse(code);
+		const tree = env["parser"].parse(code);
 		if (debug) console.log(tree)
 		
-		let scopes = env["extended_syntax"].validate(tree)
+		const scopes = env["extended_syntax"].validate(tree)
 		if (debug) console.log(scopes.join("").toString())
 
-		let graphes = env["graph"].ASTToGraph(tree, initial_block, control_inputs, initial_values)
+		const graphes = env["graph"].ASTToGraph(tree, initial_block, control_inputs, initial_values)
 		if (debug) console.log("G1__: ", graphes[0])
 		if (debug) console.log("G2__: ", graphes[1])
 
-		let scheduled_blocks = env["scheduler"].schedule(graphes[0])
-		let scheduled_blocks_init = env["scheduler"].scheduleInit(graphes[1])
+		const scheduled_blocks = env["scheduler"].schedule(graphes[0])
+		const scheduled_blocks_init = env["scheduler"].scheduleInit(graphes[1])
 		if (debug) console.log(scheduled_blocks.map(b => b.operation + "   " + b.label() + " " + (b.val ? b.val : "")))
 		if (debug) console.log(scheduled_blocks_init.map(b => b.operation + "   " + b.label() + " " + (b.val ? b.val : "")))
 
-		let files = env["output_generation"].convert(env["doT"], env["templates"], target_lang, graphes[0], graphes[1], scheduled_blocks, scheduled_blocks_init)
+		const files = env["output_generation"].convert(env["doT"], env["templates"], target_lang, graphes[0], graphes[1], scheduled_blocks, scheduled_blocks_init)
 		return files
 	}
 
 	exports["compile"] = compile
 
 }());
+
 }).call(this)}).call(this,require("buffer").Buffer)
-},{"./extended_syntax":1,"./grammar":2,"./graph":3,"./output_generation":4,"./scheduler":5,"buffer":10,"dot":7,"path":12}],7:[function(require,module,exports){
-// doT.js
-// 2011-2014, Laura Doktorova, https://github.com/olado/doT
-// Licensed under the MIT license.
-
-(function () {
-	"use strict";
-
-	var doT = {
-		name: "doT",
-		version: "1.1.1",
-		templateSettings: {
-			evaluate:    /\{\{([\s\S]+?(\}?)+)\}\}/g,
-			interpolate: /\{\{=([\s\S]+?)\}\}/g,
-			encode:      /\{\{!([\s\S]+?)\}\}/g,
-			use:         /\{\{#([\s\S]+?)\}\}/g,
-			useParams:   /(^|[^\w$])def(?:\.|\[[\'\"])([\w$\.]+)(?:[\'\"]\])?\s*\:\s*([\w$\.]+|\"[^\"]+\"|\'[^\']+\'|\{[^\}]+\})/g,
-			define:      /\{\{##\s*([\w\.$]+)\s*(\:|=)([\s\S]+?)#\}\}/g,
-			defineParams:/^\s*([\w$]+):([\s\S]+)/,
-			conditional: /\{\{\?(\?)?\s*([\s\S]*?)\s*\}\}/g,
-			iterate:     /\{\{~\s*(?:\}\}|([\s\S]+?)\s*\:\s*([\w$]+)\s*(?:\:\s*([\w$]+))?\s*\}\})/g,
-			varname:	"it",
-			strip:		true,
-			append:		true,
-			selfcontained: false,
-			doNotSkipEncoded: false
-		},
-		template: undefined, //fn, compile template
-		compile:  undefined, //fn, for express
-		log: true
-	}, _globals;
-
-	doT.encodeHTMLSource = function(doNotSkipEncoded) {
-		var encodeHTMLRules = { "&": "&#38;", "<": "&#60;", ">": "&#62;", '"': "&#34;", "'": "&#39;", "/": "&#47;" },
-			matchHTML = doNotSkipEncoded ? /[&<>"'\/]/g : /&(?!#?\w+;)|<|>|"|'|\//g;
-		return function(code) {
-			return code ? code.toString().replace(matchHTML, function(m) {return encodeHTMLRules[m] || m;}) : "";
-		};
-	};
-
-	_globals = (function(){ return this || (0,eval)("this"); }());
-
-	/* istanbul ignore else */
-	if (typeof module !== "undefined" && module.exports) {
-		module.exports = doT;
-	} else if (typeof define === "function" && define.amd) {
-		define(function(){return doT;});
-	} else {
-		_globals.doT = doT;
-	}
-
-	var startend = {
-		append: { start: "'+(",      end: ")+'",      startencode: "'+encodeHTML(" },
-		split:  { start: "';out+=(", end: ");out+='", startencode: "';out+=encodeHTML(" }
-	}, skip = /$^/;
-
-	function resolveDefs(c, block, def) {
-		return ((typeof block === "string") ? block : block.toString())
-		.replace(c.define || skip, function(m, code, assign, value) {
-			if (code.indexOf("def.") === 0) {
-				code = code.substring(4);
-			}
-			if (!(code in def)) {
-				if (assign === ":") {
-					if (c.defineParams) value.replace(c.defineParams, function(m, param, v) {
-						def[code] = {arg: param, text: v};
-					});
-					if (!(code in def)) def[code]= value;
-				} else {
-					new Function("def", "def['"+code+"']=" + value)(def);
-				}
-			}
-			return "";
-		})
-		.replace(c.use || skip, function(m, code) {
-			if (c.useParams) code = code.replace(c.useParams, function(m, s, d, param) {
-				if (def[d] && def[d].arg && param) {
-					var rw = (d+":"+param).replace(/'|\\/g, "_");
-					def.__exp = def.__exp || {};
-					def.__exp[rw] = def[d].text.replace(new RegExp("(^|[^\\w$])" + def[d].arg + "([^\\w$])", "g"), "$1" + param + "$2");
-					return s + "def.__exp['"+rw+"']";
-				}
-			});
-			var v = new Function("def", "return " + code)(def);
-			return v ? resolveDefs(c, v, def) : v;
-		});
-	}
-
-	function unescape(code) {
-		return code.replace(/\\('|\\)/g, "$1").replace(/[\r\t\n]/g, " ");
-	}
-
-	doT.template = function(tmpl, c, def) {
-		c = c || doT.templateSettings;
-		var cse = c.append ? startend.append : startend.split, needhtmlencode, sid = 0, indv,
-			str  = (c.use || c.define) ? resolveDefs(c, tmpl, def || {}) : tmpl;
-
-		str = ("var out='" + (c.strip ? str.replace(/(^|\r|\n)\t* +| +\t*(\r|\n|$)/g," ")
-					.replace(/\r|\n|\t|\/\*[\s\S]*?\*\//g,""): str)
-			.replace(/'|\\/g, "\\$&")
-			.replace(c.interpolate || skip, function(m, code) {
-				return cse.start + unescape(code) + cse.end;
-			})
-			.replace(c.encode || skip, function(m, code) {
-				needhtmlencode = true;
-				return cse.startencode + unescape(code) + cse.end;
-			})
-			.replace(c.conditional || skip, function(m, elsecase, code) {
-				return elsecase ?
-					(code ? "';}else if(" + unescape(code) + "){out+='" : "';}else{out+='") :
-					(code ? "';if(" + unescape(code) + "){out+='" : "';}out+='");
-			})
-			.replace(c.iterate || skip, function(m, iterate, vname, iname) {
-				if (!iterate) return "';} } out+='";
-				sid+=1; indv=iname || "i"+sid; iterate=unescape(iterate);
-				return "';var arr"+sid+"="+iterate+";if(arr"+sid+"){var "+vname+","+indv+"=-1,l"+sid+"=arr"+sid+".length-1;while("+indv+"<l"+sid+"){"
-					+vname+"=arr"+sid+"["+indv+"+=1];out+='";
-			})
-			.replace(c.evaluate || skip, function(m, code) {
-				return "';" + unescape(code) + "out+='";
-			})
-			+ "';return out;")
-			.replace(/\n/g, "\\n").replace(/\t/g, '\\t').replace(/\r/g, "\\r")
-			.replace(/(\s|;|\}|^|\{)out\+='';/g, '$1').replace(/\+''/g, "");
-			//.replace(/(\s|;|\}|^|\{)out\+=''\+/g,'$1out+=');
-
-		if (needhtmlencode) {
-			if (!c.selfcontained && _globals && !_globals._encodeHTML) _globals._encodeHTML = doT.encodeHTMLSource(c.doNotSkipEncoded);
-			str = "var encodeHTML = typeof _encodeHTML !== 'undefined' ? _encodeHTML : ("
-				+ doT.encodeHTMLSource.toString() + "(" + (c.doNotSkipEncoded || '') + "));"
-				+ str;
-		}
-		try {
-			return new Function(c.varname, str);
-		} catch (e) {
-			/* istanbul ignore else */
-			if (typeof console !== "undefined") console.log("Could not create a template function: " + str);
-			throw e;
-		}
-	};
-
-	doT.compile = function(tmpl, def) {
-		return doT.template(tmpl, null, def);
-	};
-}());
-
-},{}],8:[function(require,module,exports){
+},{"./extended_syntax":2,"./grammar":3,"./graph":4,"./output_generation":5,"./scheduler":6,"buffer":10,"dot":1,"path":12}],8:[function(require,module,exports){
 
 },{}],9:[function(require,module,exports){
 'use strict'
@@ -5652,5 +5663,5 @@ process.chdir = function (dir) {
 };
 process.umask = function() { return 0; };
 
-},{}]},{},[6])(6)
+},{}]},{},[7])(7)
 });
