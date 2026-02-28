@@ -55,18 +55,22 @@ function cacheElements() {
 }
 
 function setConsoleMessage(message) {
-  elements.console.value = message;
+  var text = message || "";
+  elements.console.value = text;
+  elements.console.textContent = text;
+  elements.console.defaultValue = text;
 }
 
 function setExportError(message) {
-  if (!message) {
-    elements.exportConsole.textContent = "";
-    elements.exportConsole.hidden = true;
-    return;
-  }
+  elements.exportConsole.textContent = message || "Choose a target language and compile to export.";
+  elements.exportConsole.classList.remove("is-success");
+  elements.exportConsole.classList.add("is-danger", "is-light");
+}
 
-  elements.exportConsole.textContent = message;
-  elements.exportConsole.hidden = false;
+function setExportMessage(message) {
+  elements.exportConsole.textContent = message || "Choose a target language and compile to export.";
+  elements.exportConsole.classList.remove("is-danger", "is-light");
+  elements.exportConsole.classList.add("is-success");
 }
 
 function setTransportMode(mode, label) {
@@ -125,7 +129,6 @@ function newTab(title) {
   titleSpan.textContent = safeTitle;
   closeButton.type = "button";
   closeButton.className = "tab-close has-text-danger";
-  closeButton.textContent = "✖";
   closeButton.setAttribute("aria-label", "Close tab");
   closeButton.addEventListener("click", function (event) {
     event.stopPropagation();
@@ -392,7 +395,7 @@ function compileAndView() {
   var o;
   var saveButton;
 
-  setExportError("");
+  setExportMessage("Compiling export...");
   elements.exportView.innerHTML = "";
   elements.exportSave.innerHTML = "";
 
@@ -414,6 +417,8 @@ function compileAndView() {
     setExportError(String(e));
     return;
   }
+
+  setExportMessage("Compiled successfully. Generated " + output.length + " file" + (output.length === 1 ? "." : "s."));
 
   saveButton = document.createElement("button");
   saveButton.classList.add("button", "is-primary", "is-large");
