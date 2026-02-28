@@ -35,7 +35,7 @@ function cacheElements() {
     compilePlayButton: document.getElementById("compilePlayButton"),
     compileViewButton: document.getElementById("compileViewButton"),
     console: document.getElementById("consoleTA"),
-    plugin: document.getElementById("pluginDiv"),
+    plugin: document.getElementById("pluginControls"),
     examples: document.getElementById("examples"),
     examplesDropdown: document.getElementById("examplesDropdown"),
     examplesToggle: document.querySelector("[data-toggle-examples]"),
@@ -150,73 +150,6 @@ function getInput(ted) {
   };
 }
 
-function buildPluginControls(controlInputs) {
-  var fragment = document.createDocumentFragment();
-  var hasControls = false;
-  var i;
-
-  elements.plugin.innerHTML = "";
-
-  for (i = 0; i < controlInputs.length; i += 1) {
-    var controlId = controlInputs[i];
-
-    if (!controlId) {
-      continue;
-    }
-
-    hasControls = true;
-
-    var field = document.createElement("div");
-    var fieldLabel = document.createElement("div");
-    var label = document.createElement("label");
-    var fieldBody = document.createElement("div");
-    var fieldWrap = document.createElement("div");
-    var control = document.createElement("p");
-    var slider = document.createElement("input");
-    var initialLevel = inputInitialValues[controlId];
-
-    if (initialLevel === undefined) {
-      initialLevel = 0;
-    }
-
-    field.className = "field is-horizontal";
-    fieldLabel.className = "field-label is-normal";
-    label.className = "label";
-    label.textContent = controlId;
-    fieldBody.className = "field-body";
-    fieldWrap.className = "field";
-    control.className = "control";
-    slider.className = "input is-primary";
-    slider.type = "range";
-    slider.id = controlId;
-    slider.name = controlId;
-    slider.min = "0";
-    slider.max = "1";
-    slider.step = "any";
-    slider.value = String(initialLevel);
-    slider.addEventListener("input", function (event) {
-      handleInput(event.target);
-    });
-
-    fieldLabel.appendChild(label);
-    control.appendChild(slider);
-    fieldWrap.appendChild(control);
-    fieldBody.appendChild(fieldWrap);
-    field.appendChild(fieldLabel);
-    field.appendChild(fieldBody);
-    fragment.appendChild(field);
-  }
-
-  if (!hasControls) {
-    var emptyState = document.createElement("div");
-    emptyState.className = "field is-horizontal";
-    emptyState.innerHTML = '<label class="label">No control inputs declared for this block.</label>';
-    fragment.appendChild(emptyState);
-  }
-
-  elements.plugin.appendChild(fragment);
-}
-
 function compile(ted, targetLang) {
   var input = getInput(ted);
   var debug = false;
@@ -232,8 +165,8 @@ function compile(ted, targetLang) {
   );
 }
 
-function handleInput(e) {
-  node.port.postMessage({ type: "paramChange", id: e.id, value: e.value });
+function handleInput(id, value) {
+  node.port.postMessage({ type: "paramChange", id: id, value: value });
 }
 
 async function play(activeTed, processorStr) {
@@ -241,7 +174,7 @@ async function play(activeTed, processorStr) {
   var previousSource = sourceSelected;
   var scriptUrl;
 
-  buildPluginControls(controlInputs);
+  elements.plugin.setControls(controlInputs, inputInitialValues);
 
   scriptUrl = URL.createObjectURL(new Blob([processorStr], { type: "text/javascript" }));
 
@@ -562,6 +495,9 @@ window.addEventListener("load", function () {
   });
   elements.outputButton.addEventListener("click", function () {
     playPause();
+  });
+  elements.plugin.addEventListener("param-change", function (event) {
+    handleInput(event.detail.id, event.detail.value);
   });
   elements.audioFile.addEventListener("change", function () {
     buttonUserFileF(elements.audioFile.files);

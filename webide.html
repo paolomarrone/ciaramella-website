@@ -11,6 +11,7 @@
 <script src="js/components/site-shell.js" defer></script>
 <script src="js/components/code-editor.js" defer></script>
 <script src="js/components/editor-workspace.js" defer></script>
+<script src="js/components/plugin-controls.js" defer></script>
 <script src="js/vendor/zampogna-web.js" defer></script>
 <script src="js/webide.js" defer></script>
 </head>
@@ -80,11 +81,7 @@
 
         <div class="box transport-box">
           <h5 class="title is-5">Plugin</h5>
-          <div id="pluginDiv">
-            <div class="field is-horizontal">
-              <label class="label">The plugin will be shown here when compiled</label>
-            </div>
-          </div>
+          <ciaramella-plugin-controls id="pluginControls"></ciaramella-plugin-controls>
         </div>
 
         <div class="box transport-box">
