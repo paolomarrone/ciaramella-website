@@ -31,9 +31,7 @@ var exampleSpecs = [
 
 function cacheElements() {
   elements = {
-    tabs: document.getElementById("tabs"),
-    newTabButton: document.getElementById("newTabB"),
-    textEditors: document.getElementById("textEditorsDiv"),
+    workspace: document.getElementById("workspace"),
     compilePlayButton: document.getElementById("compilePlayButton"),
     compileViewButton: document.getElementById("compileViewButton"),
     console: document.getElementById("consoleTA"),
@@ -98,88 +96,8 @@ function stopCurrentInput() {
   inputNode = null;
 }
 
-function newTextEditor() {
-  var editor = document.createElement("ciaramella-editor");
-  elements.textEditors.appendChild(editor);
-  return editor;
-}
-
-function closeTab(tab) {
-  var listItem = tab.closest("li");
-  var ul = listItem.parentNode;
-  var wasActive = listItem.classList.contains("is-active");
-
-  listItem.ted.parentNode.removeChild(listItem.ted);
-  ul.removeChild(listItem);
-
-  if (ul.getElementsByTagName("li").length <= 1) {
-    newTab();
-  } else if (wasActive) {
-    selectTab(ul.children[ul.children.length - 2]);
-  }
-}
-
-function newTab(title) {
-  var safeTitle = title || "Untitled.crm";
-  var li = document.createElement("li");
-  var anchor = document.createElement("a");
-  var titleSpan = document.createElement("span");
-  var closeButton = document.createElement("button");
-
-  titleSpan.textContent = safeTitle;
-  closeButton.type = "button";
-  closeButton.className = "tab-close has-text-danger";
-  closeButton.setAttribute("aria-label", "Close tab");
-  closeButton.addEventListener("click", function (event) {
-    event.stopPropagation();
-    closeTab(closeButton);
-  });
-
-  anchor.appendChild(titleSpan);
-  anchor.appendChild(document.createTextNode(" "));
-  anchor.appendChild(closeButton);
-  li.appendChild(anchor);
-
-  li.addEventListener("click", function () {
-    selectTab(li);
-  });
-
-  elements.newTabButton.parentNode.insertBefore(li, elements.newTabButton);
-
-  var ted = newTextEditor();
-  li.ted = ted;
-  selectTab(li);
-
-  return ted;
-}
-
-function selectTab(e) {
-  var i;
-
-  if (!e || !e.parentNode || e.classList.contains("is-active")) {
-    return;
-  }
-
-  for (i = 0; i < e.parentNode.children.length - 1; i += 1) {
-    e.parentNode.children[i].classList.remove("is-active");
-    e.parentNode.children[i].ted.hidden = true;
-  }
-
-  e.classList.add("is-active");
-  e.ted.hidden = false;
-}
-
 function loadExample(id) {
-  var activeTed = getActiveTED();
-  var ted;
-
-  if (!activeTed) {
-    ted = newTab(id + ".crm");
-  } else if (activeTed.isBlank()) {
-    ted = activeTed;
-  } else {
-    ted = newTab(id + ".crm");
-  }
+  var ted = elements.workspace.getEditorForExample(id + ".crm");
 
   ted.setCode(codeExamples[id].code);
   ted.setInitialBlock(codeExamples[id].ib);
@@ -188,16 +106,7 @@ function loadExample(id) {
 }
 
 function getActiveTED() {
-  var i;
-
-  for (i = 0; i < elements.tabs.children[0].children.length; i += 1) {
-    var li = elements.tabs.children[0].children[i];
-    if (li.classList.contains("is-active")) {
-      return li.ted;
-    }
-  }
-
-  return null;
+  return elements.workspace.getActiveEditor();
 }
 
 function getInput(ted) {
@@ -635,11 +544,7 @@ function loadExamples() {
 
 window.addEventListener("load", function () {
   cacheElements();
-  newTab();
   bindExampleMenu();
-  elements.newTabButton.addEventListener("click", function () {
-    newTab();
-  });
   elements.compilePlayButton.addEventListener("click", compileAndPlay);
   elements.compileViewButton.addEventListener("click", compileAndView);
   elements.micButton.addEventListener("click", function () {

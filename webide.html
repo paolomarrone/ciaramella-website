@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
 <script src="js/components/site-shell.js" defer></script>
 <script src="js/components/code-editor.js" defer></script>
+<script src="js/components/editor-workspace.js" defer></script>
 <script src="js/vendor/zampogna-web.js" defer></script>
 <script src="js/webide.js" defer></script>
 </head>
@@ -50,13 +51,7 @@
         </div>
       </div>
 
-      <div id="tabs" class="tabs is-boxed is-centered is-normal">
-        <ul>
-          <li id="newTabB"><a><span>✚</span></a></li>
-        </ul>
-      </div>
-
-      <div id="textEditorsDiv"></div>
+      <ciaramella-workspace id="workspace"></ciaramella-workspace>
 
       <div class="mt-4">
         <button class="button is-primary is-medium is-fullwidth" id="compilePlayButton">Compile &amp; Play</button>

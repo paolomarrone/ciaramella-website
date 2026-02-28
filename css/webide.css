@@ -19,6 +19,47 @@
   margin-top: 1rem;
 }
 
+.workspace-editors > * + * {
+  margin-top: 1rem;
+}
+
+.workspace-tab .workspace-tab-button,
+.workspace-new-tab .workspace-add-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 2.75rem;
+  padding: 0.7rem 0.95rem;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 0.7rem 0.7rem 0 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.workspace-tab .workspace-tab-button {
+  color: var(--ink-soft);
+}
+
+.workspace-tab .workspace-tab-button:hover,
+.workspace-new-tab .workspace-add-button:hover {
+  background: #f5f8ff;
+  color: var(--accent-strong);
+  border-color: #d1ddf5;
+}
+
+.workspace-tab.is-active .workspace-tab-button {
+  background: var(--surface);
+  color: #173b82;
+  border-color: var(--border);
+}
+
+.workspace-new-tab .workspace-add-button {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
 .editor-pane {
   position: relative;
 }
