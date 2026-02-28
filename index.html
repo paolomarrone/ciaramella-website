@@ -26,7 +26,18 @@
         <li><span class="feature-chip">Modular</span></li>
       </ul>
 
-      <a class="button is-primary is-large" href="webide.html">Try Ciaramella Online</a>
+      <div class="hero-actions" aria-label="Primary actions">
+        <a class="button is-primary is-large" href="webide.html">Try Ciaramella Online</a>
+        <button
+          type="button"
+          class="install-cta"
+          data-copy-text="npm i zampogna"
+          aria-label="Install Zampogna from npm"
+        >
+          <span class="install-cta-label">npm</span>
+          <code>npm i zampogna</code>
+        </button>
+      </div>
     </section>
 
     <section class="panel-card content-panel content">
@@ -132,7 +143,7 @@ y = frac (x) {
       <h2 class="title is-2">Compilation</h2>
       <p>The compiler developed for Ciaramella is called <strong>Zampogna</strong> and it is available on <a href="https://github.com/paolomarrone/Zampogna" target="_blank" rel="noreferrer">GitHub</a>. It ships with a command-line interface for Node.js. Alternatively, you can use the <a href="webide.html">web playground</a> to write code, compile it, and immediately hear the result.</p>
       <p>To compile the previous example from a file called <code>lp.crm</code>:</p>
-      <div class="code-block"><pre>zampogna.js -i lp3stereo -c volumeL,volumeR -t cpp lp.crm</pre></div>
+      <div class="code-block"><pre>zampogna -i lp3stereo -c volumeL,volumeR -t cpp lp.crm</pre></div>
       <p>The <code>-i lp3stereo</code> flag selects the initial block (similar to <code>main</code> in C). The <code>-c volumeL,volumeR</code> flag tells the compiler that <code>volumeL</code> and <code>volumeR</code> are user controls and not audio signals.</p>
 
       <hr class="section-divider">

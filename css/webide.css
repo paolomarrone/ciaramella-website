@@ -71,6 +71,8 @@
   padding: 10px 0;
   height: 51vh;
   border-radius: 0.9rem;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
   font-size: 16px;
   line-height: 1.2;
   outline: none;

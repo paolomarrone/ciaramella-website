@@ -29,7 +29,10 @@ class SiteNav extends HTMLElement {
             <div class="navbar-end">
               <a class="navbar-item${isActive("home")}" href="index.html">Home</a>
               <a class="navbar-item${isActive("papers")}" href="papers.html">Papers</a>
-              <a class="navbar-item" href="https://github.com/paolomarrone/Zampogna" target="_blank" rel="noreferrer">Source</a>
+              <a class="navbar-item is-external" href="https://github.com/paolomarrone/Zampogna" target="_blank" rel="noreferrer">
+                <span>Source</span>
+                <span class="external-link-mark" aria-hidden="true">↗</span>
+              </a>
               <a class="navbar-item${isActive("webide")}" href="webide.html">Web Playground</a>
             </div>
           </div>
@@ -83,5 +86,68 @@ class SiteFooter extends HTMLElement {
   }
 }
 
+async function copyText(value) {
+  if (!value) {
+    return false;
+  }
+
+  if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+    await navigator.clipboard.writeText(value);
+    return true;
+  }
+
+  const helper = document.createElement("textarea");
+  helper.value = value;
+  helper.setAttribute("readonly", "");
+  helper.style.position = "absolute";
+  helper.style.left = "-9999px";
+  document.body.appendChild(helper);
+  helper.select();
+
+  try {
+    return document.execCommand("copy");
+  } finally {
+    document.body.removeChild(helper);
+  }
+}
+
+function initCopyActions() {
+  const copyButtons = document.querySelectorAll("[data-copy-text]");
+
+  copyButtons.forEach((button) => {
+    let resetTimer = null;
+
+    button.addEventListener("click", async () => {
+      const copyValue = button.getAttribute("data-copy-text") || "";
+      const code = button.querySelector("code");
+      const previousLabel = code ? code.textContent : "";
+
+      try {
+        const copied = await copyText(copyValue);
+        if (!copied) {
+          return;
+        }
+      } catch (error) {
+        return;
+      }
+
+      button.classList.add("is-copied");
+
+      if (code) {
+        code.textContent = "Copied";
+      }
+
+      window.clearTimeout(resetTimer);
+      resetTimer = window.setTimeout(() => {
+        button.classList.remove("is-copied");
+        if (code) {
+          code.textContent = previousLabel;
+        }
+      }, 1400);
+    });
+  });
+}
+
 customElements.define("site-nav", SiteNav);
 customElements.define("site-footer", SiteFooter);
+initCopyActions();
