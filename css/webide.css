@@ -30,7 +30,6 @@
   padding: 10px 0;
   height: 51vh;
   border-radius: 0.9rem;
-  resize: none;
   font-size: 16px;
   line-height: 1.2;
   outline: none;
@@ -43,8 +42,7 @@
 }
 
 .lineCounter {
-  display: flex;
-  border-color: transparent;
+  display: block;
   overflow-y: hidden;
   text-align: right;
   box-shadow: none;
@@ -53,19 +51,24 @@
   background-color: #191d28;
   border-color: #191d28;
   color: #7f8aa3;
-  flex: none;
   border-top-right-radius: 0;
   border-bottom-right-radius: 0;
+  padding-left: 0.25rem;
+  padding-right: 0.75rem;
+  white-space: pre;
+  user-select: none;
+  pointer-events: none;
 }
 
 .codeEditor {
   padding-left: calc(4rem + 5px);
   width: 100%;
+  min-height: 14rem;
   background-color: #0f172a;
   border-color: #0f172a;
   color: #f8fafc;
   white-space: pre;
-  flex: 1;
+  resize: vertical;
 }
 
 .editor-controls {
@@ -84,6 +87,17 @@
   background-color: #192235;
   color: #e7edf9;
   font-family: "Lucida Console", "Courier New", Courier, monospace;
+}
+
+input[type="range"].input {
+  padding: 0;
+  min-height: auto;
+  height: 0.55rem;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #d9e5ff, #b8cbff);
+  box-shadow: none;
+  cursor: pointer;
 }
 
 .transport-grid {

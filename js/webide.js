@@ -95,77 +95,14 @@ function stopCurrentInput() {
 }
 
 function newTextEditor() {
-  var codeEditor = document.createElement("textarea");
-  var lineCounter = document.createElement("textarea");
-
-  lineCounter.readOnly = true;
-  lineCounter.classList.add("lineCounter");
-  codeEditor.placeholder = "Code here...";
-  codeEditor.spellcheck = false;
-  codeEditor.classList.add("codeEditor");
-
-  codeEditor.addEventListener("scroll", function () {
-    lineCounter.scrollTop = codeEditor.scrollTop;
-    lineCounter.scrollLeft = codeEditor.scrollLeft;
-  });
-
-  codeEditor.addEventListener("keydown", function (e) {
-    var keyCode = e.keyCode;
-    var value = codeEditor.value;
-    var selectionStart = codeEditor.selectionStart;
-    var selectionEnd = codeEditor.selectionEnd;
-
-    if (keyCode === 9) {
-      e.preventDefault();
-      codeEditor.value = value.slice(0, selectionStart) + "\t" + value.slice(selectionEnd);
-      codeEditor.setSelectionRange(selectionStart + 1, selectionStart + 1);
-    }
-  });
-
-  var lineCountCache = 0;
-
-  function lineCounterRefresh() {
-    var lineCount = codeEditor.value.split("\n").length;
-    var outarr = [];
-
-    if (lineCountCache !== lineCount) {
-      for (var x = 0; x < lineCount; x += 1) {
-        outarr[x] = String(x + 1) + " ";
-      }
-      lineCounter.value = outarr.join("\n");
-    }
-
-    lineCountCache = lineCount;
-  }
-
-  codeEditor.addEventListener("input", lineCounterRefresh);
-  lineCounterRefresh();
-
-  var textEditorDiv = document.createElement("div");
-  textEditorDiv.classList.add("editor-pane");
-  textEditorDiv.appendChild(lineCounter);
-  textEditorDiv.appendChild(codeEditor);
-
-  var compileInputDiv = document.createElement("div");
-  compileInputDiv.classList.add("editor-controls");
-  compileInputDiv.innerHTML =
-    '<input class="input is-danger" type="text" title="Initial block" placeholder="Initial Block. E.g.: lowpass_filter">' +
-    '<input class="input is-warning" type="text" title="Control inputs" placeholder="Control inputs. E.g.: volume, cutoff, resonance">' +
-    '<input class="input is-warning" type="text" title="Initial input values" placeholder="Initial input values. E.g.: x = 0.5, volume = 1">';
-
-  var editorShell = document.createElement("section");
-  editorShell.classList.add("editor-shell");
-  editorShell.appendChild(textEditorDiv);
-  editorShell.appendChild(compileInputDiv);
-
-  elements.textEditors.appendChild(editorShell);
-
-  return editorShell;
+  var editor = document.createElement("ciaramella-editor");
+  elements.textEditors.appendChild(editor);
+  return editor;
 }
 
 function closeTab(tab) {
-  var ul = tab.parentNode.parentNode.parentNode;
-  var listItem = tab.parentNode.parentNode;
+  var listItem = tab.closest("li");
+  var ul = listItem.parentNode;
   var wasActive = listItem.classList.contains("is-active");
 
   listItem.ted.parentNode.removeChild(listItem.ted);
@@ -231,19 +168,20 @@ function selectTab(e) {
 
 function loadExample(id) {
   var activeTed = getActiveTED();
-  var codeArea = activeTed.children[0].children[1];
   var ted;
 
-  if (!codeArea.value) {
+  if (!activeTed) {
+    ted = newTab(id + ".crm");
+  } else if (activeTed.isBlank()) {
     ted = activeTed;
   } else {
     ted = newTab(id + ".crm");
   }
 
-  ted.children[0].children[1].value = codeExamples[id].code;
-  ted.children[1].children[0].value = codeExamples[id].ib;
-  ted.children[1].children[1].value = codeExamples[id].cs;
-  ted.children[0].children[1].dispatchEvent(new Event("input"));
+  ted.setCode(codeExamples[id].code);
+  ted.setInitialBlock(codeExamples[id].ib);
+  ted.setControlInputs(codeExamples[id].cs);
+  ted.focusEditor();
 }
 
 function getActiveTED() {
@@ -260,12 +198,12 @@ function getActiveTED() {
 }
 
 function getInput(ted) {
-  var code = ted.children[0].children[1].value;
-  var initialBlock = ted.children[1].children[0].value;
-  var controlInputsS = ted.children[1].children[1].value;
-  var inputInitialValuesS = ted.children[1].children[2].value;
+  var code = ted.getCode();
+  var initialBlock = ted.getInitialBlock();
+  var controlInputs = ted.getControlInputs();
+  var inputInitialValuesS = ted.getInitialValues();
 
-  if (!code) {
+  if (!code.trim()) {
     throw new Error("Empty code");
   }
 
@@ -295,12 +233,7 @@ function getInput(ted) {
   return {
     code: code,
     initial_block: initialBlock,
-    control_inputs: controlInputsS
-      .split(",")
-      .map(function (entry) {
-        return entry.trim();
-      })
-      .filter(Boolean),
+    control_inputs: controlInputs,
     inputInitialValues: inputInitialValues
   };
 }
@@ -392,10 +325,7 @@ function handleInput(e) {
 }
 
 async function play(activeTed, processorStr) {
-  var controlInputsS = activeTed.children[1].children[1].value;
-  var controlInputs = controlInputsS.split(",").map(function (value) {
-    return value.trim();
-  });
+  var controlInputs = activeTed.getControlInputs();
   var previousSource = sourceSelected;
   var scriptUrl;
 
